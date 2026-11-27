@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QR Code Raw Inspector</title>
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Sarabun', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #f1f5f9;
+      margin: 0;
+      padding: 14px;
+      display: flex;
+      justify-content: center;
+      color: #0f172a;
+    }
+    .container {
+      width: 100%;
+      max-width: 480px;
+    }
+    .card {
+      background: #fff;
+      border-radius: 14px;
+      padding: 16px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+      border-top: 6px solid #0284c7;
+      margin-bottom: 14px;
+    }
+    h1 {
+      margin: 0 0 4px 0;
+      font-size: 19px;
+      color: #0369a1;
+    }
+    p.sub {
+      margin: 0 0 12px 0;
+      font-size: 13px;
+      color: #475569;
+    }
+    .camera-box {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 4 / 3;
+      background: #000;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .guide {
+      position: absolute;
+      inset: 16px;
+      border: 2px dashed rgba(255, 255, 255, 0.75);
+      border-radius: 8px;
+      pointer-events: none;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      padding: 8px;
+    }
+    .guide span {
+      background: rgba(15, 23, 42, 0.7);
+      color: #fff;
+      font-size: 12px;
+      padding: 3px 10px;
+      border-radius: 12px;
+    }
+    .btn-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    button, .upload-label {
+      flex: 1;
+      padding: 12px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: bold;
+      cursor: pointer;
+      text-align: center;
+    }
+    .btn-scan { background: #0284c7; color: #fff; }
+    .btn-clear { background: #e2e8f0; color: #1e293b; }
+    .upload-label { background: #0d9488; color: #fff; display: inline-block; }
+    .status {
+      margin-top: 10px;
+      font-size: 13px;
+      font-weight: bold;
+      color: #d97706;
+    }
+    .result-box {
+      display: none;
+      margin-top: 14px;
+      background: #f8fafc;
+      border: 1.5px solid #cbd5e1;
+      border-radius: 10px;
+      padding: 12px;
+    }
+    .raw-output {
+      background: #0f172a;
+      color: #38bdf8;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 14px;
+      padding: 10px;
+      border-radius: 8px;
+      word-break: break-all;
+      white-space: pre-wrap;
+      margin: 6px 0 10px 0;
+    }
+    .token-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      margin-top: 6px;
+    }
+    .token-table th, .token-table td {
+      border: 1px solid #cbd5e1;
+      padding: 6px 8px;
+      text-align: left;
+    }
+    .token-table th {
+      background: #e2e8f0;
+      color: #1e293b;
+    }
+    .btn-copy {
+      width: 100%;
+      margin-top: 10px;
+      background: #16a34a;
+      color: #fff;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <div class="card">
+    <h1>🔍 ตัวอ่านข้อมูลดิบใน QR Code</h1>
+    <p class="sub">ใช้ส่องกล้องหรือเลือกรูปซองยา เพื่อดูข้อความทั้งหมดที่ซ่อนอยู่ใน QR Code</p>
+
+    <div class="camera-box" id="cameraBox">
+      <video id="video" autoplay playsinline></video>
+      <div class="guide"><span>ส่องไปที่ QR Code มุมขวาบนของฉลากยา</span></div>
+    </div>
+
+    <div class="btn-row">
+      <button type="button" class="btn-scan" onclick="manualCapture()">📸 อ่านจากกล้อง</button>
+      <label class="upload-label">
+        📁 เลือกรูปซองยา
+        <input type="file" id="fileInput" accept="image/*" hidden>
+      </label>
+      <button type="button" class="btn-clear" onclick="resetScan()">🔄 ล้างค่า</button>
+    </div>
+
+    <div id="status" class="status">⏳ กำลังเปิดกล้อง...</div>
+
+    <div id="resultBox" class="result-box">
+      <div style="font-size:13px; font-weight:bold; color:#0f172a;">
+        ข้อความดิบที่อ่านได้ (ความยาว <span id="charCount">0</span> ตัวอักษร):
+      </div>
+      <div id="rawOutput" class="raw-output">-</div>
+
+      <div id="splitSection" style="display:none;">
+        <div style="font-size:13px; font-weight:bold; color:#334155; margin-top:8px;">
+          แยกข้อมูลตามเครื่องหมายคั่น (<span id="delimiterLabel">-</span>):
+        </div>
+        <table class="token-table">
+          <thead>
+            <tr>
+              <th style="width:65px;">ลำดับ</th>
+              <th>ค่าข้อมูล</th>
+            </tr>
+          </thead>
+          <tbody id="tokenBody"></tbody>
+        </table>
+      </div>
+
+      <button type="button" class="btn-copy" onclick="copyRawText()">📋 คัดลอกข้อความดิบ</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const video = document.getElementById('video');
+  const statusEl = document.getElementById('status');
+  const resultBox = document.getElementById('resultBox');
+  const rawOutput = document.getElementById('rawOutput');
+  let scanInterval = null;
+  let lastDecoded = '';
+
+  async function initCamera() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: 'environment',
+          width: { ideal: 1920 },
+          height: { ideal: 1440 }
+        }
+      });
+      video.srcObject = stream;
+      statusEl.textContent = '🔎 กล้องพร้อมแล้ว — กำลังสแกนหา QR Code อัตโนมัติ...';
+      statusEl.style.color = '#0284c7';
+      startAutoLoop();
+    } catch (err) {
+      statusEl.textContent = '⚠️ เปิดกล้องไม่ได้ กดปุ่ม "📁 เลือกรูปซองยา" เพื่ออ่านจากไฟล์ภาพแทนได้';
+      statusEl.style.color = '#dc2626';
+    }
+  }
+
+  function startAutoLoop() {
+    if (scanInterval) clearInterval(scanInterval);
+    scanInterval = setInterval(async () => {
+      if (!video.videoWidth || video.paused) return;
+      const canvas = captureCanvasFromVideo();
+      const text = await decodeQrFromCanvas(canvas);
+      if (text && text !== lastDecoded) {
+        showDecodedResult(text, 'กล้องอัตโนมัติ');
+      }
+    }, 350);
+  }
+
+  function captureCanvasFromVideo() {
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+    return canvas;
+  }
+
+  async function decodeQrFromCanvas(canvas) {
+    // 1. ลองใช้ BarcodeDetector ของเบราว์เซอร์ก่อน
+    if ('BarcodeDetector' in window) {
+      try {
+        const detector = new BarcodeDetector({ formats: ['qr_code'] });
+        const codes = await detector.detect(canvas);
+        if (codes.length > 0 && codes[0].rawValue) {
+          return codes[0].rawValue;
+        }
+      } catch (e) {}
+    }
+
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    const w = canvas.width;
+    const h = canvas.height;
+
+    // 2. ลองอ่านทั้งภาพด้วย jsQR
+    const fullData = ctx.getImageData(0, 0, w, h);
+    const fullQr = jsQR(fullData.data, w, h, { inversionAttempts: 'attemptBoth' });
+    if (fullQr && fullQr.data) return fullQr.data;
+
+    // 3. ครอปเฉพาะโซนมุมขวาบน (ตำแหน่ง QR บนซองยา) เพื่อเพิ่มความละเอียดในการอ่าน
+    const rx = Math.floor(w * 0.45);
+    const rw = w - rx;
+    const rh = Math.floor(h * 0.65);
+    if (rw > 60 && rh > 60) {
+      const cropData = ctx.getImageData(rx, 0, rw, rh);
+      const cropQr = jsQR(cropData.data, rw, rh, { inversionAttempts: 'attemptBoth' });
+      if (cropQr && cropQr.data) return cropQr.data;
+    }
+
+    return '';
+  }
+
+  function showDecodedResult(text, sourceLabel) {
+    lastDecoded = text;
+    statusEl.textContent = `✅ อ่าน QR Code สำเร็จ! (จาก${sourceLabel})`;
+    statusEl.style.color = '#16a34a';
+
+    resultBox.style.display = 'block';
+    rawOutput.textContent = text;
+    document.getElementById('charCount').textContent = text.length;
+
+    // ตรวจสอบตัวคั่นเพื่อแยกข้อมูลแต่ละช่องให้ดูง่าย
+    const delimiters = ['|', ',', '/', ';', '\t', ' '];
+    const foundDelim = delimiters.find(d => d === '\t' ? text.includes('\t') : text.includes(d));
+    const splitSection = document.getElementById('splitSection');
+    const tokenBody = document.getElementById('tokenBody');
+
+    if (foundDelim) {
+      const actualDelim = foundDelim === '\t' ? '\t' : foundDelim;
+      const parts = text.split(actualDelim);
+      document.getElementById('delimiterLabel').textContent = foundDelim === ' ' ? 'ช่องว่าง (Space)' : `"${foundDelim}"`;
+      tokenBody.innerHTML = parts.map((p, idx) =>
+        `<tr><td>ช่องที่ ${idx + 1}</td><td><b>${escapeHtml(p)}</b></td></tr>`
+      ).join('');
+      splitSection.style.display = 'block';
+    } else {
+      splitSection.style.display = 'none';
+    }
+  }
+
+  function escapeHtml(str) {
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  async function manualCapture() {
+    if (!video.videoWidth) return;
+    statusEl.textContent = '⏳ กำลังสแกนภาพจากกล้อง...';
+    const text = await decodeQrFromCanvas(captureCanvasFromVideo());
+    if (text) {
+      showDecodedResult(text, 'การกดถ่าย');
+    } else {
+      statusEl.textContent = '❌ ยังอ่าน QR ไม่ติด ลองขยับให้ชัดขึ้นหรือกดเลือกรูปถ่าย';
+      statusEl.style.color = '#dc2626';
+    }
+  }
+
+  document.getElementById('fileInput').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    statusEl.textContent = '⏳ กำลังอ่าน QR จากรูปภาพ...';
+    statusEl.style.color = '#0284c7';
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = async () => {
+        const c = document.createElement('canvas');
+        c.width = img.width;
+        c.height = img.height;
+        c.getContext('2d').drawImage(img, 0, 0);
+        const text = await decodeQrFromCanvas(c);
+        if (text) {
+          showDecodedResult(text, 'ไฟล์รูปภาพ');
+        } else {
+          resultBox.style.display = 'none';
+          statusEl.textContent = '❌ ไม่พบ QR Code ในรูปภาพนี้ (ลองครอปให้เห็น QR ชัดขึ้น)';
+          statusEl.style.color = '#dc2626';
+        }
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+
+  function copyRawText() {
+    if (!lastDecoded) return;
+    navigator.clipboard.writeText(lastDecoded).then(() => {
+      alert('คัดลอกข้อความดิบเรียบร้อย:
+' + lastDecoded);
+    });
+  }
+
+  function resetScan() {
+    lastDecoded = '';
+    resultBox.style.display = 'none';
+    document.getElementById('fileInput').value = '';
+    statusEl.textContent = '🔎 กำลังสแกนหา QR Code อัตโนมัติ...';
+    statusEl.style.color = '#0284c7';
+  }
+
+  initCamera();
+</script>
+</body>
+</html>
