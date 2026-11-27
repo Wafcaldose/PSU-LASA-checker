@@ -237,7 +237,7 @@
     <!-- ==================== STEP 1: FULL-FRAME QR LOCK + OCR ==================== -->
     <div class="card" id="step1Card">
       <h2>Step 1: สแกนฉลากยา (เต็มกรอบกล้อง)</h2>
-      <p class="sub">ส่องซองยาให้เห็นทั้งใบ ระบบจะล็อก QR Code อัตโนมัติแล้วอ่านชื่อยา</p>
+      <p class="sub">ส่องซองยาให้เห็นทั้งใบ ระบบจะล็อก QR Code อัตโนมัติแล้วสะสมค่าที่อ่านได้ทีละส่วน</p>
 
       <div class="camera-wrapper" id="cameraWrapper">
         <video id="video" autoplay playsinline></video>
@@ -320,6 +320,22 @@
   let lockedQrData = '';
   let loggedScanKeys = new Set();
 
+  // เก็บสถานะสะสมของค่า OCR ทั้ง 4 ค่าสำหรับซองยาที่กำลังสแกน (ค่าไหนผ่านแล้วจะจำไว้ ไม่ต้องอ่านติดพร้อมกันในครั้งเดียว)
+  function createEmptyOcrState() {
+    return {
+      qrCode: '',
+      namePassed: false,
+      nameValue: '',
+      strengthPassed: false,
+      strengthValue: '',
+      qtyPassed: false,
+      qtyValue: '',
+      locPassed: false,
+      locValue: ''
+    };
+  }
+  let ocrProgress = createEmptyOcrState();
+
   const video = document.getElementById('video');
   const statusEl = document.getElementById('status');
   const liveBadge = document.getElementById('liveBadge');
@@ -387,6 +403,7 @@
     currentUser = null;
     activeOrder = null;
     lockedQrData = '';
+    ocrProgress = createEmptyOcrState();
     loggedScanKeys.clear();
     document.getElementById('pinInput').value = '';
     document.getElementById('appView').style.display = 'none';
@@ -399,7 +416,7 @@
   async function loadDrugsFromAppsScript() {
     const dbStatus = document.getElementById('dbStatus');
 
-    if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL === "https://script.google.com/macros/s/AKfycbxhZmS1A54ftdDAXkwhAYTI2JiDbG_win1NBrOM2iegzai5Pp1j_EQbVYu4l3IrAW8/exec") {
+    if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL === "วางลิงก์_Apps_Script_Web_App_ของคุณที่นี่") {
       dbStatus.textContent = '⚠️ ยังไม่ได้ใส่ลิงก์ APPS_SCRIPT_URL ในโค้ด';
       dbStatus.style.color = '#d97706';
       updateDbBadge();
@@ -610,7 +627,7 @@
 
     liveBadge.textContent = `🔒 ล็อก QR สำเร็จ! (รหัสยา: ${code})`;
     liveBadge.style.background = 'rgba(22, 163, 74, 0.95)';
-    document.getElementById('scanBtn').textContent = '📸 ถ่ายภาพอ่านชื่อยา (OCR) ซ้ำ';
+    document.getElementById('scanBtn').textContent = '📸 ถ่ายภาพอ่านค่าที่เหลือ (OCR) เพิ่ม';
 
     document.getElementById('compareGrid').style.display = 'grid';
     document.getElementById('unlockQrBtn').style.display = 'inline-block';
@@ -622,8 +639,10 @@
   function unlockQr() {
     lockedQrData = '';
     activeOrder = null;
+    ocrProgress = createEmptyOcrState();
     document.getElementById('unlockQrBtn').style.display = 'none';
     document.getElementById('qrResultText').innerHTML = '-';
+    document.getElementById('ocrResultText').innerHTML = '-';
     document.getElementById('verdictBox').style.display = 'none';
     document.getElementById('scanBtn').textContent = '📸 ถ่ายภาพอ่านฉลาก';
     liveBadge.textContent = '🔎 กำลังมองหา QR Code อัตโนมัติ...';
@@ -641,6 +660,8 @@
 
       if (foundQr) {
         lockedQrData = foundQr;
+        ocrProgress = createEmptyOcrState();
+        ocrProgress.qrCode = foundQr;
         clearInterval(autoScanTimer);
         renderLockedQrUI();
         processFullFrame(frameCanvas);
@@ -662,6 +683,12 @@
         lockedQrData = found;
         if (autoScanTimer) clearInterval(autoScanTimer);
       }
+    }
+
+    // หากเปลี่ยนซอง (QR ใหม่) ให้รีเซ็ตสถานะสะสม OCR
+    if (lockedQrData && ocrProgress.qrCode !== lockedQrData) {
+      ocrProgress = createEmptyOcrState();
+      ocrProgress.qrCode = lockedQrData;
     }
 
     const extractedDrugCode = parseQrDetails(lockedQrData).code;
@@ -696,7 +723,6 @@
 
     const lines = rawOcr.split('\n').map(l => l.trim()).filter(l => l.length > 1);
     const fullLower = rawOcr.toLowerCase();
-    // ลบช่องว่างเพื่อช่วยเทียบกรณี OCR เว้นวรรคเช่น "2.5 mg" vs "2.5mg" หรือ "12 Ac" vs "12Ac"
     const compactOcr = fullLower.replace(/\s+/g, '');
 
     const drugFromQR = DRUG_DB[extractedDrugCode] || null;
@@ -711,7 +737,7 @@
       matchedLine = lines.find(line => drugFromOCR.ocrKeywords.some(k => line.toLowerCase().includes(k))) || '';
     }
 
-    // 2. แยก "ชื่อยา" และ "ความแรง" จากรายการยาเป้าหมาย (drugFromQR) เพื่อตรวจสอบกับ OCR
+    // 2. แยก "ชื่อยา" และ "ความแรง" จากรายการยาเป้าหมาย (drugFromQR)
     const strengthRegex = /(\d+(?:\.\d+)?\s*(?:mg|g|mcg|ml|%|iu|meq|mmol)(?:\/\d*(?:\.\d+)?\s*(?:ml|mg|g))?)/gi;
     let expectedStrengths = [];
     let expectedNameWords = [];
@@ -727,63 +753,68 @@
         .filter(w => w.length >= 3);
     }
 
-    // ตรวจสอบว่า OCR อ่าน "ชื่อยา" ได้ครบตามคำหลักหรือไม่
-    const ocrNameMatched = drugFromQR
+    // ตรวจสอบ "ชื่อยา" ในรอบนี้ -> หากผ่านแล้วบันทึกสะสมลง ocrProgress
+    const thisNameMatched = drugFromQR
       ? (expectedNameWords.length > 0
           ? expectedNameWords.every(w => fullLower.includes(w))
           : drugFromQR.ocrKeywords.some(k => fullLower.includes(k)))
       : Boolean(drugFromOCR);
 
-    const detectedDrugName = ocrNameMatched
-      ? (drugFromQR ? drugFromQR.name.replace(strengthRegex, '').replace(/\s+/g, ' ').trim() : drugFromOCR.name)
-      : (drugFromOCR ? drugFromOCR.name : '');
+    if (thisNameMatched) {
+      ocrProgress.namePassed = true;
+      ocrProgress.nameValue = drugFromQR
+        ? drugFromQR.name.replace(strengthRegex, '').replace(/\s+/g, ' ').trim()
+        : drugFromOCR.name;
+    }
 
-    // ตรวจสอบว่า OCR อ่าน "ความแรง" ได้ครบถ้วนหรือไม่ (ป้องกันสับสนยาชื่อเหมือนกันแต่คนละความแรง)
-    let ocrStrengthMatched = false;
-    let detectedStrength = '';
+    // ตรวจสอบ "ความแรง" ในรอบนี้ -> หากผ่านแล้วบันทึกสะสมลง ocrProgress
+    let thisStrengthMatched = false;
+    let thisStrengthValue = '';
     if (drugFromQR) {
       if (expectedStrengths.length > 0) {
-        ocrStrengthMatched = expectedStrengths.every(st => compactOcr.includes(st));
-        const foundSt = expectedStrengths.filter(st => compactOcr.includes(st));
-        detectedStrength = foundSt.length > 0 ? foundSt.join(', ') : '';
+        thisStrengthMatched = expectedStrengths.every(st => compactOcr.includes(st));
+        if (thisStrengthMatched) {
+          thisStrengthValue = expectedStrengths.join(', ');
+        }
       } else {
-        ocrStrengthMatched = true;
-        detectedStrength = '-';
+        thisStrengthMatched = true;
+        thisStrengthValue = '-';
       }
     } else {
       const anyStr = rawOcr.match(strengthRegex);
       if (anyStr) {
-        ocrStrengthMatched = true;
-        detectedStrength = anyStr.join(', ');
+        thisStrengthMatched = true;
+        thisStrengthValue = anyStr.join(', ');
       }
     }
 
-    // 3. ดึง "จำนวนยา" จาก OCR (บังคับต้องอ่านตัวเลขได้ ห้ามเป็น 'ไม่ระบุ')
-    let qty = '';
+    if (thisStrengthMatched) {
+      ocrProgress.strengthPassed = true;
+      ocrProgress.strengthValue = thisStrengthValue;
+    }
+
+    // 3. ดึง "จำนวนยา" ในรอบนี้ -> หากจับตัวเลขได้แล้วบันทึกสะสมลง ocrProgress
     const searchScope = matchedLine || rawOcr;
     const qtyMatch =
       searchScope.match(/[\[\(\{]\s*(\d{1,4})\s*[\]\)\}]/) ||
       searchScope.match(/(?:จำนวน|qty|x|\*)\s*[:=]?\s*(\d{1,4})/i) ||
       (matchedLine ? matchedLine.match(/\s(\d{1,3})(?:\s*[=\]\)\}])?$/) : null);
     if (qtyMatch && qtyMatch[1]) {
-      qty = qtyMatch[1];
+      ocrProgress.qtyPassed = true;
+      ocrProgress.qtyValue = qtyMatch[1];
     }
-    const ocrQtyMatched = Boolean(qty);
 
-    // 4. ดึงและตรวจสอบ "ตำแหน่งจัดเก็บยา" จาก OCR
+    // 4. ตรวจสอบ "ตำแหน่งจัดเก็บยา" ในรอบนี้ -> หากอ่านตรงกับฐานข้อมูลแล้วบันทึกสะสมลง ocrProgress
     const shelfLocation = (drugFromQR && drugFromQR.location) ? drugFromQR.location.trim() : '';
     const compactLoc = shelfLocation.toLowerCase().replace(/\s+/g, '');
-    let detectedLocation = '';
-    let ocrLocMatched = false;
 
-    if (shelfLocation && compactOcr.includes(compactLoc)) {
-      detectedLocation = shelfLocation;
-      ocrLocMatched = true;
-    } else {
-      const locPatternMatch = rawOcr.match(/\b(\d{1,2}[A-Za-z]{1,3}|[A-Za-z]{1,2}-?\d{1,3})\b/);
-      if (locPatternMatch) {
-        detectedLocation = locPatternMatch[1];
-      }
+    if (!shelfLocation && drugFromQR) {
+      // กรณีในฐานข้อมูลไม่ได้ระบุตำแหน่งไว้ ให้ถือว่าผ่านส่วนตำแหน่ง
+      ocrProgress.locPassed = true;
+      ocrProgress.locValue = '-';
+    } else if (shelfLocation && compactOcr.includes(compactLoc)) {
+      ocrProgress.locPassed = true;
+      ocrProgress.locValue = shelfLocation;
     }
 
     const locationBadgeHtml = shelfLocation
@@ -798,12 +829,19 @@
         '<span style="color:#dc2626;">ยังจับ QR ไม่ได้ (กำลังสแกนหาอัตโนมัติ...)</span>';
     }
 
-    // แสดงรายละเอียดครบทั้ง 4 รายการในฝั่ง OCR
+    // แสดงสถานะสะสมทั้ง 4 รายการ (ค่าไหนผ่านแล้วจะขึ้น ✅ และจำไว้ตลอดสำหรับซองนี้)
+    const displayDrugName = ocrProgress.namePassed
+      ? ocrProgress.nameValue
+      : (drugFromOCR ? `${drugFromOCR.name} (ไม่ตรง QR)` : 'รออ่านซ้ำ');
+    const displayStrength = ocrProgress.strengthPassed ? ocrProgress.strengthValue : 'รออ่านซ้ำ';
+    const displayQty = ocrProgress.qtyPassed ? ocrProgress.qtyValue : 'รออ่านซ้ำ';
+    const displayLoc = ocrProgress.locPassed ? ocrProgress.locValue : 'รออ่านซ้ำ';
+
     document.getElementById('ocrResultText').innerHTML =
-      `<div>${ocrNameMatched ? '✅' : '❌'} ชื่อยา: <b>${detectedDrugName || 'อ่านไม่ติด'}</b></div>` +
-      `<div>${ocrStrengthMatched ? '✅' : '❌'} ความแรง: <b>${detectedStrength || 'อ่านไม่ติด'}</b></div>` +
-      `<div>${ocrQtyMatched ? '✅' : '❌'} จำนวน: <b style="color:${ocrQtyMatched ? '#15803d' : '#dc2626'};">${qty || 'อ่านไม่ติด'}</b></div>` +
-      `<div>${ocrLocMatched ? '✅' : '❌'} ตำแหน่ง: <b>${detectedLocation || 'อ่านไม่ติด'}</b></div>`;
+      `<div>${ocrProgress.namePassed ? '✅' : '⏳'} ชื่อยา: <b>${displayDrugName}</b></div>` +
+      `<div>${ocrProgress.strengthPassed ? '✅' : '⏳'} ความแรง: <b>${displayStrength}</b></div>` +
+      `<div>${ocrProgress.qtyPassed ? '✅' : '⏳'} จำนวน: <b style="color:${ocrProgress.qtyPassed ? '#15803d' : '#d97706'};">${displayQty}</b></div>` +
+      `<div>${ocrProgress.locPassed ? '✅' : '⏳'} ตำแหน่ง: <b>${displayLoc}</b></div>`;
 
     const verdictBox = document.getElementById('verdictBox');
     const verdictMsg = document.getElementById('verdictMsg');
@@ -811,8 +849,15 @@
     verdictBox.style.display = 'block';
     goBtn.style.display = 'none';
 
-    const isDifferentDrug = drugFromQR && drugFromOCR && drugFromQR.code !== drugFromOCR.code && !ocrNameMatched;
-    const isAllFourComplete = Boolean(drugFromQR && ocrNameMatched && ocrStrengthMatched && ocrQtyMatched && ocrLocMatched);
+    // แจ้งเตือน Near-Miss ทันทีหากอ่านเจอชื่อยาตัวอื่นคนละชนิดกับ QR
+    const isDifferentDrug = drugFromQR && drugFromOCR && drugFromQR.code !== drugFromOCR.code && !ocrProgress.namePassed;
+    const isAllFourComplete = Boolean(
+      drugFromQR &&
+      ocrProgress.namePassed &&
+      ocrProgress.strengthPassed &&
+      ocrProgress.qtyPassed &&
+      ocrProgress.locPassed
+    );
 
     if (isDifferentDrug) {
       playSound('fail');
@@ -829,24 +874,25 @@
       verdictMsg.innerHTML = `🚨 <b>ข้อมูลขัดแย้งกัน!</b><br>QR คือ <b>${drugFromQR.name}</b> แต่หน้าซองคือ <b>${drugFromOCR.name}</b>` +
         (isLogged ? `<br><span class="log-badge">📝 บันทึกสถิติ Near-Miss ลงชีตแล้ว</span>` : '');
     } else if (isAllFourComplete) {
-      activeOrder = { ...drugFromQR, qty: qty, location: shelfLocation };
+      activeOrder = { ...drugFromQR, qty: ocrProgress.qtyValue, location: shelfLocation };
       verdictBox.className = 'verdict-box verdict-pass';
       verdictMsg.innerHTML =
         `✅ <b>ยืนยัน OCR ครบทั้ง 4 รายการตรงตาม QR!</b> (รหัส ${drugFromQR.code})<br>` +
-        `จัดยา: <b>${drugFromQR.name}</b> จำนวน <b>${qty}</b>` +
-        `<div style="margin-top:6px; font-size:15px;">ตำแหน่งจัดเก็บยา: ${locationBadgeHtml}</div>`;
+        `จัดยา: <b>${drugFromQR.name}</b> จำนวน <b>${ocrProgress.qtyValue}</b>` +
+        (locationBadgeHtml ? `<div style="margin-top:6px; font-size:15px;">ตำแหน่งจัดเก็บยา: ${locationBadgeHtml}</div>` : '');
       goBtn.style.display = 'block';
     } else if (drugFromQR) {
       const missingItems = [];
-      if (!ocrNameMatched) missingItems.push('ชื่อยา');
-      if (!ocrStrengthMatched) missingItems.push(`ความแรง (${expectedStrengths.join(', ')})`);
-      if (!ocrQtyMatched) missingItems.push('จำนวนยา');
-      if (!ocrLocMatched) missingItems.push(`ตำแหน่ง (${shelfLocation || 'ไม่ระบุในฐานข้อมูล'})`);
+      if (!ocrProgress.namePassed) missingItems.push('ชื่อยา');
+      if (!ocrProgress.strengthPassed) missingItems.push(`ความแรง (${expectedStrengths.join(', ')})`);
+      if (!ocrProgress.qtyPassed) missingItems.push('จำนวนยา');
+      if (!ocrProgress.locPassed) missingItems.push(`ตำแหน่ง (${shelfLocation})`);
 
+      const passedCount = 4 - missingItems.length;
       verdictBox.className = 'verdict-box verdict-warn';
       verdictMsg.innerHTML =
-        `⚠️ <b>ยังอ่านข้อมูลหน้าซองไม่ครบ 4 รายการ</b> (ขาด: <b>${missingItems.join(', ')}</b>)<br>` +
-        `<small style="display:block; margin-top:4px;">กรุณาจัดซองยาให้เห็นข้อความชัดเจน แล้วกดปุ่มสีฟ้า <b>"📸 ถ่ายภาพอ่านชื่อยา (OCR) ซ้ำ"</b> เพื่อยืนยันก่อนไป Step 2</small>`;
+        `⏳ <b>ผ่านแล้ว ${passedCount}/4 รายการ</b> — เหลืออีก: <b>${missingItems.join(', ')}</b><br>` +
+        `<small style="display:block; margin-top:4px;">ค่าที่ผ่านแล้วถูกบันทึกไว้เรียบร้อย ส่องเฉพาะจุดที่เหลือแล้วกด <b>"📸 ถ่ายภาพอ่านค่าที่เหลือ (OCR) เพิ่ม"</b> ได้เลย</small>`;
     } else if (lockedQrData && !drugFromQR) {
       verdictBox.className = 'verdict-box verdict-fail';
       verdictMsg.innerHTML = `❌ ล็อกรหัสยา <b>${extractedDrugCode}</b> ได้แล้ว แต่ยังไม่พบใน Google Sheets`;
@@ -872,6 +918,7 @@
     const file = e.target.files[0];
     if (!file) return;
     lockedQrData = '';
+    ocrProgress = createEmptyOcrState();
     if (autoScanTimer) clearInterval(autoScanTimer);
     const reader = new FileReader();
     reader.onload = (ev) => {
@@ -994,6 +1041,7 @@
     if (html5QrCode && html5QrCode.isScanning) await html5QrCode.stop();
     activeOrder = null;
     lockedQrData = '';
+    ocrProgress = createEmptyOcrState();
     loggedScanKeys.clear();
     document.getElementById('unlockQrBtn').style.display = 'none';
     document.getElementById('scanBtn').textContent = '📸 ถ่ายภาพอ่านฉลาก';
