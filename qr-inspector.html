@@ -343,8 +343,7 @@
   function copyRawText() {
     if (!lastDecoded) return;
     navigator.clipboard.writeText(lastDecoded).then(() => {
-      alert('คัดลอกข้อความดิบเรียบร้อย:
-' + lastDecoded);
+      alert('คัดลอกข้อความดิบเรียบร้อย: ' + lastDecoded);
     });
   }
 
