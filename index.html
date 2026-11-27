@@ -34,6 +34,11 @@
       align-items: center;
     }
     .card.db-card { border-top-color: #10b981; padding: 12px 14px; }
+    .card.batch-card {
+      border-top-color: #f59e0b;
+      background: #fffbeb;
+      padding: 12px 14px;
+    }
     .card.step2 { border-top-color: #7c3aed; }
     .card.disabled { opacity: 0.45; pointer-events: none; }
     h2 { margin: 0 0 4px 0; font-size: 18px; color: #0f172a; }
@@ -61,6 +66,77 @@
       flex: none; width: auto; padding: 6px 12px; font-size: 12px;
       background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1;
       border-radius: 8px; cursor: pointer;
+    }
+
+    /* Batch Order Styles */
+    .batch-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+    .batch-pill {
+      display: inline-block;
+      background: #fef3c7;
+      color: #92400e;
+      border: 1px solid #f59e0b;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 12px;
+      font-weight: bold;
+    }
+    .batch-list {
+      margin: 8px 0 0 0;
+      padding: 0;
+      list-style: none;
+      font-size: 13px;
+    }
+    .batch-list li {
+      background: #fff;
+      border: 1px solid #fde68a;
+      border-radius: 8px;
+      padding: 6px 10px;
+      margin-bottom: 5px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .btn-close-batch {
+      flex: none;
+      width: 100%;
+      margin-top: 8px;
+      padding: 9px 12px;
+      font-size: 13px;
+      background: #d97706;
+      color: #fff;
+      border-radius: 8px;
+    }
+    .batch-switch-alert {
+      margin-top: 8px;
+      padding: 10px;
+      border-radius: 8px;
+      background: #fef2f2;
+      border: 1.5px solid #ef4444;
+      color: #991b1b;
+      font-size: 13px;
+      display: none;
+    }
+    .batch-switch-actions {
+      display: flex;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .btn-switch-yes {
+      background: #dc2626;
+      color: #fff;
+      padding: 7px 10px;
+      font-size: 12px;
+    }
+    .btn-switch-no {
+      background: #e2e8f0;
+      color: #1e293b;
+      padding: 7px 10px;
+      font-size: 12px;
     }
 
     .camera-wrapper {
@@ -186,6 +262,22 @@
       border-radius: 6px;
       font-weight: bold;
     }
+    .qn-badge {
+      display: inline-block;
+      background: #fef3c7;
+      color: #92400e;
+      padding: 1px 7px;
+      border-radius: 6px;
+      font-weight: bold;
+    }
+    .hn-badge {
+      display: inline-block;
+      background: #e0e7ff;
+      color: #3730a3;
+      padding: 1px 7px;
+      border-radius: 6px;
+      font-weight: bold;
+    }
   </style>
 </head>
 <body>
@@ -237,10 +329,35 @@
       </div>
     </div>
 
+    <!-- ==================== BATCH / MULTI-ITEM ORDER CARD ==================== -->
+    <div class="card batch-card" id="batchCard">
+      <div class="batch-header">
+        <strong style="font-size:14px; color:#92400e;">🧺 ออเดอร์ปัจจุบัน (Batch by HN + QN + วันที่)</strong>
+        <span class="batch-pill" id="batchCountBadge">0 รายการ</span>
+      </div>
+      <div id="batchMeta" style="font-size:12px; color:#78350f; margin-top:4px;">
+        ยังไม่มีออเดอร์ที่เปิดอยู่ — สแกนซองแรกเพื่อเริ่มจับกลุ่มตาม HN + QN + วันที่ อัตโนมัติ
+      </div>
+      <ul class="batch-list" id="batchItemsList"></ul>
+
+      <!-- แจ้งเตือนเมื่อพบ HN, QN หรือ วันที่ ไม่ตรงกับออเดอร์ที่เปิดค้างไว้ -->
+      <div id="batchSwitchAlert" class="batch-switch-alert">
+        <div id="batchSwitchText"></div>
+        <div class="batch-switch-actions">
+          <button type="button" class="btn-switch-yes" onclick="confirmSwitchBatch()">✅ ปิดออเดอร์เดิมและเริ่มใหม่</button>
+          <button type="button" class="btn-switch-no" onclick="cancelSwitchBatch()">❌ ยกเลิกซองนี้ (สแกนผิดตะกร้า)</button>
+        </div>
+      </div>
+
+      <button type="button" id="closeBatchBtn" class="btn-close-batch" style="display:none;" onclick="closeCurrentBatch()">
+        ✅ จบออเดอร์นี้ / เริ่มผู้ป่วยรายถัดไป
+      </button>
+    </div>
+
     <!-- ==================== STEP 1: FULL-FRAME AUTO QR + AUTO OCR ==================== -->
     <div class="card" id="step1Card">
       <h2>Step 1: สแกนฉลากยา (อัตโนมัติทั้ง QR & OCR)</h2>
-      <p class="sub">ส่องซองยาให้เห็นทั้งใบ ระบบจะล็อก QR Code และถ่ายอ่าน OCR สะสมให้อัตโนมัติจนครบ 4 ค่า</p>
+      <p class="sub">ส่องซองยาให้เห็นทั้งใบ ระบบจะล็อก QR และอ่าน OCR สะสมครบ 6 ค่า (รวม HN & QN)</p>
 
       <div class="camera-wrapper" id="cameraWrapper">
         <video id="video" autoplay playsinline></video>
@@ -296,7 +413,7 @@
         <div id="verifyDetail" style="font-size: 14px;"></div>
       </div>
 
-      <button class="btn-reset" onclick="resetAll()">🔄 สแกนซองยาถัดไป</button>
+      <button class="btn-reset" onclick="resetAll(false)">🔄 สแกนซองยาถัดไป (ในออเดอร์เดิม)</button>
     </div>
   </div>
 </div>
@@ -315,7 +432,7 @@
     }
   };
 
-  let currentUser = null; // เก็บข้อมูลผู้ใช้งานที่ Login (staffId, name, role)
+  let currentUser = null;
   let activeOrder = null;
   let step1Stream = null;
   let html5QrCode = null;
@@ -328,7 +445,19 @@
   let sharedOcrWorker = null;
   let ocrWorkerPromise = null;
 
-  // เก็บสถานะสะสมของค่า OCR ทั้ง 4 ค่าสำหรับซองยาที่กำลังสแกน (ค่าไหนผ่านแล้วจะจำไว้ ไม่ต้องอ่านติดพร้อมกันในครั้งเดียว)
+  // ==================== BATCH / MULTI-ITEM ORDER STATE ====================
+  // จับกลุ่มออเดอร์เดียวกันด้วยเงื่อนไข 3 ชั้น: HN เดียวกัน + QN เดียวกัน + วันที่เดียวกัน
+  let currentBatch = {
+    hn: '',
+    qn: '',
+    dateKey: '',     // YYYY-MM-DD (ใช้วันที่จาก QR หากมี หรือวันที่ปัจจุบัน)
+    dateDisplay: '', // เช่น 27/11/2569
+    dept: '',
+    items: []        // [{ code, name, qty, location, time }]
+  };
+  let pendingNewQrRaw = ''; // เก็บ QR ใหม่ชั่วคราวกรณีพบ HN, QN หรือ วันที่ เปลี่ยนไปจากออเดอร์เดิม
+
+  // เก็บสถานะสะสมของค่า OCR ทั้ง 6 ค่าสำหรับซองยาที่กำลังสแกน
   function createEmptyOcrState() {
     return {
       qrCode: '',
@@ -340,6 +469,10 @@
       qtyValue: '',
       locPassed: false,
       locValue: '',
+      qnPassed: false,
+      qnValue: '',
+      hnPassed: false,
+      hnValue: '',
       isComplete: false,
       hasConflict: false
     };
@@ -350,6 +483,257 @@
   const statusEl = document.getElementById('status');
   const liveBadge = document.getElementById('liveBadge');
   const guideHint = document.getElementById('guideHint');
+
+  // คืนค่าวันที่ปัจจุบันในรูปแบบมาตรฐาน YYYY-MM-DD และรูปแบบไทย DD/MM/BBBB
+  function getTodayDateInfo() {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    const thaiYear = y + 543;
+    return {
+      dateKey: `${y}-${m}-${d}`,
+      dateDisplay: `${d}/${m}/${thaiYear}`
+    };
+  }
+
+  // แปลงวันที่ที่อาจพบใน QR (เช่น 27/11/2569, 27/11/2026, 2026-11-27) เป็น dateKey มาตรฐาน
+  function normalizeDateFromToken(token) {
+    if (!token) return null;
+    const clean = token.trim();
+    let m = clean.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+    if (m) {
+      const dd = m[1].padStart(2, '0');
+      const mm = m[2].padStart(2, '0');
+      let yyyy = parseInt(m[3], 10);
+      if (yyyy > 2400) yyyy -= 543;
+      return {
+        dateKey: `${yyyy}-${mm}-${dd}`,
+        dateDisplay: `${dd}/${mm}/${yyyy + 543}`
+      };
+    }
+    m = clean.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+    if (m) {
+      let yyyy = parseInt(m[1], 10);
+      if (yyyy > 2400) yyyy -= 543;
+      const mm = m[2].padStart(2, '0');
+      const dd = m[3].padStart(2, '0');
+      return {
+        dateKey: `${yyyy}-${mm}-${dd}`,
+        dateDisplay: `${dd}/${mm}/${yyyy + 543}`
+      };
+    }
+    return null;
+  }
+
+  // แยกข้อมูลจาก QR Code: รองรับ HN, QN (Queue Number), วันที่, ช่อง/หอผู้ป่วย และรหัสยา
+  function parseQrDetails(rawQr) {
+    const today = getTodayDateInfo();
+    if (!rawQr) {
+      return { hn: '', qn: '', dateKey: today.dateKey, dateDisplay: today.dateDisplay, dept: '-', code: '' };
+    }
+
+    if (rawQr.includes('|')) {
+      const parts = rawQr.split('|').map(s => s.trim());
+      const rawHn = (parts[0] || '').replace(/^hn\s*[:=\-]?\s*/i, '').trim();
+      const hn = rawHn === '-' ? '' : rawHn;
+      const code = parts[parts.length - 1] || '';
+
+      let resolvedDate = today;
+      let qnCandidate = '';
+
+      const middleParts = parts.slice(1, -1);
+      for (const part of middleParts) {
+        const parsedDate = normalizeDateFromToken(part);
+        if (parsedDate) {
+          resolvedDate = parsedDate;
+          continue;
+        }
+        const qnPrefix = part.match(/^qn\s*[:=\-]?\s*([a-z0-9\-]+)$/i);
+        if (qnPrefix) {
+          qnCandidate = qnPrefix[1];
+        } else if (!qnCandidate && /^[a-z]?\d{1,6}$/i.test(part)) {
+          qnCandidate = part;
+        }
+      }
+
+      if (!qnCandidate && parts.length >= 3 && parts[1]) {
+        qnCandidate = parts[1].replace(/^qn\s*[:=\-]?\s*/i, '').trim();
+      }
+
+      const dept = parts.length >= 4
+        ? `${parts[parts.length - 2]} (ช่อง ${parts[parts.length - 3] || '-'})`
+        : (parts.length === 3 ? parts[1] : '-');
+
+      return {
+        hn,
+        qn: qnCandidate,
+        dateKey: resolvedDate.dateKey,
+        dateDisplay: resolvedDate.dateDisplay,
+        dept,
+        code
+      };
+    }
+
+    return {
+      hn: '',
+      qn: '',
+      dateKey: today.dateKey,
+      dateDisplay: today.dateDisplay,
+      dept: '-',
+      code: rawQr.trim()
+    };
+  }
+
+  // ==================== BATCH ORDER MANAGEMENT ====================
+  function hasOpenBatch() {
+    return Boolean(currentBatch.hn || currentBatch.qn || currentBatch.items.length > 0);
+  }
+
+  function renderBatchUI() {
+    const metaEl = document.getElementById('batchMeta');
+    const listEl = document.getElementById('batchItemsList');
+    const countBadge = document.getElementById('batchCountBadge');
+    const closeBtn = document.getElementById('closeBatchBtn');
+
+    if (!hasOpenBatch()) {
+      countBadge.textContent = '0 รายการ';
+      metaEl.innerHTML = 'ยังไม่มีออเดอร์ที่เปิดอยู่ — สแกนซองแรกเพื่อเริ่มจับกลุ่มตาม <b>HN + QN + วันที่</b> อัตโนมัติ';
+      listEl.innerHTML = '';
+      closeBtn.style.display = 'none';
+      return;
+    }
+
+    countBadge.textContent = `ตรวจผ่านแล้ว ${currentBatch.items.length} รายการ`;
+    metaEl.innerHTML =
+      `HN: <span class="hn-badge">${currentBatch.hn || '-'}</span> • ` +
+      `คิว (QN): <span class="qn-badge">${currentBatch.qn || '-'}</span> • ` +
+      `วันที่: <b>${currentBatch.dateDisplay}</b>`;
+
+    if (currentBatch.items.length === 0) {
+      listEl.innerHTML = '<li style="color:#78350f; justify-content:center;">⏳ กำลังทวนสอบซองแรกของออเดอร์นี้...</li>';
+    } else {
+      listEl.innerHTML = currentBatch.items.map((it, idx) =>
+        `<li>
+          <span>✅ <b>#${idx + 1}</b> ${it.name} <small style="color:#64748b;">(${it.code})</small></span>
+          <span style="font-weight:bold; color:#15803d;">x${it.qty}</span>
+        </li>`
+      ).join('');
+    }
+
+    closeBtn.style.display = 'block';
+  }
+
+  // ตรวจสอบว่า QR ที่สแกนใหม่เป็น HN, QN และ วันที่ เดียวกับออเดอร์ที่เปิดอยู่หรือไม่
+  function syncBatchWithQr(rawQr) {
+    const info = parseQrDetails(rawQr);
+    const switchAlert = document.getElementById('batchSwitchAlert');
+    switchAlert.style.display = 'none';
+    pendingNewQrRaw = '';
+
+    const nextHn = info.hn || '-';
+    const nextQn = info.qn || '-';
+
+    if (!hasOpenBatch()) {
+      currentBatch = {
+        hn: nextHn,
+        qn: nextQn,
+        dateKey: info.dateKey,
+        dateDisplay: info.dateDisplay,
+        dept: info.dept,
+        items: []
+      };
+      renderBatchUI();
+      return true;
+    }
+
+    const isSameHn = nextHn === currentBatch.hn;
+    const isSameQn = nextQn === currentBatch.qn;
+    const isSameDate = info.dateKey === currentBatch.dateKey;
+
+    if (isSameHn && isSameQn && isSameDate) {
+      renderBatchUI();
+      return true;
+    }
+
+    // หากออเดอร์เดิมยังไม่มีรายการที่ตรวจเสร็จ -> สลับเป็นออเดอร์ใหม่ให้อัตโนมัติ
+    if (currentBatch.items.length === 0) {
+      currentBatch = {
+        hn: nextHn,
+        qn: nextQn,
+        dateKey: info.dateKey,
+        dateDisplay: info.dateDisplay,
+        dept: info.dept,
+        items: []
+      };
+      renderBatchUI();
+      return true;
+    }
+
+    // พบ HN, QN หรือ วันที่ ไม่ตรงกับออเดอร์ที่ตรวจค้างไว้ -> แจ้งเตือนก่อนสลับ
+    pendingNewQrRaw = rawQr;
+    const reasonParts = [];
+    if (!isSameHn) reasonParts.push(`HN เปลี่ยนจาก <b>${currentBatch.hn}</b> เป็น <b>${nextHn}</b>`);
+    if (!isSameQn) reasonParts.push(`QN เปลี่ยนจาก <b>${currentBatch.qn}</b> เป็น <b>${nextQn}</b>`);
+    if (!isSameDate) reasonParts.push(`วันที่เปลี่ยนจาก <b>${currentBatch.dateDisplay}</b> เป็น <b>${info.dateDisplay}</b>`);
+
+    document.getElementById('batchSwitchText').innerHTML =
+      `🚨 <b>ตรวจพบซองยาคนละออเดอร์!</b> (${reasonParts.join(' / ')})<br>` +
+      `ออเดอร์เดิม (HN ${currentBatch.hn} | QN ${currentBatch.qn}) ตรวจผ่านไปแล้ว <b>${currentBatch.items.length}</b> รายการ`;
+    switchAlert.style.display = 'block';
+    playSound('fail');
+    return false;
+  }
+
+  async function confirmSwitchBatch() {
+    if (!pendingNewQrRaw) return;
+    const nextQr = pendingNewQrRaw;
+    pendingNewQrRaw = '';
+    document.getElementById('batchSwitchAlert').style.display = 'none';
+
+    const info = parseQrDetails(nextQr);
+    currentBatch = {
+      hn: info.hn || '-',
+      qn: info.qn || '-',
+      dateKey: info.dateKey,
+      dateDisplay: info.dateDisplay,
+      dept: info.dept,
+      items: []
+    };
+    renderBatchUI();
+
+    lockedQrData = nextQr;
+    ocrProgress = createEmptyOcrState();
+    ocrProgress.qrCode = nextQr;
+    renderLockedQrUI();
+    if (video.videoWidth) {
+      await processFullFrame(captureHighResFrame(), true);
+      if (autoOcrEnabled && !ocrProgress.isComplete && !ocrProgress.hasConflict) {
+        startAutoOcrLoop();
+      }
+    }
+  }
+
+  function cancelSwitchBatch() {
+    pendingNewQrRaw = '';
+    document.getElementById('batchSwitchAlert').style.display = 'none';
+    unlockQr();
+  }
+
+  function closeCurrentBatch() {
+    const doneCount = currentBatch.items.length;
+    const doneHn = currentBatch.hn;
+    const doneQn = currentBatch.qn;
+    currentBatch = { hn: '', qn: '', dateKey: '', dateDisplay: '', dept: '', items: [] };
+    pendingNewQrRaw = '';
+    document.getElementById('batchSwitchAlert').style.display = 'none';
+    renderBatchUI();
+    resetAll(true);
+    if (doneCount > 0) {
+      statusEl.textContent = `✅ ปิดออเดอร์ HN ${doneHn} (QN ${doneQn}) เรียบร้อย (รวม ${doneCount} รายการ) — พร้อมสแกนรายถัดไป`;
+      statusEl.style.color = '#059669';
+    }
+  }
 
   // สร้างและใช้ Tesseract Worker ตัวเดียวซ้ำเพื่อความรวดเร็วในการสแกน OCR อัตโนมัติ
   async function getOcrWorker() {
@@ -457,7 +841,7 @@
         document.getElementById('loginView').style.display = 'none';
         document.getElementById('appView').style.display = 'block';
 
-        // เตรียม OCR Worker ล่วงหน้าเพื่อให้สแกนอัตโนมัติได้ทันที
+        renderBatchUI();
         getOcrWorker().catch(() => {});
         loadDrugsFromAppsScript();
         startStep1Camera();
@@ -485,6 +869,7 @@
     currentUser = null;
     activeOrder = null;
     lockedQrData = '';
+    currentBatch = { hn: '', qn: '', dateKey: '', dateDisplay: '', dept: '', items: [] };
     ocrProgress = createEmptyOcrState();
     loggedScanKeys.clear();
     document.getElementById('pinInput').value = '';
@@ -552,26 +937,13 @@
   // =========================================================================
   // 2. ระบบบันทึกทุกการสแกน (ทั้งถูก PASS และผิด NEAR_MISS) ลง Google Sheets
   // =========================================================================
-  function parseQrDetails(rawQr) {
-    if (!rawQr) return { hn: '-', dept: '-', code: '' };
-    if (rawQr.includes('|')) {
-      const parts = rawQr.split('|').map(s => s.trim());
-      return {
-        hn: parts[0] || '-',
-        dept: parts.length >= 4 ? `${parts[3]} (ช่อง ${parts[2] || '-'})` : '-',
-        code: parts[parts.length - 1] || ''
-      };
-    }
-    return { hn: '-', dept: '-', code: rawQr.trim() };
-  }
-
   function logVerificationToSheet(statusType, stepName, drugCode, expectedDrug, actualDrug, location, note) {
     if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL === "วางลิงก์_Apps_Script_Web_App_ของคุณที่นี่") {
       return false;
     }
 
     const qrInfo = parseQrDetails(lockedQrData);
-    const dedupeKey = `${statusType}|${stepName}|${qrInfo.hn}|${drugCode}|${actualDrug}`;
+    const dedupeKey = `${statusType}|${stepName}|${qrInfo.hn}|${qrInfo.qn}|${qrInfo.dateKey}|${drugCode}|${actualDrug}`;
 
     if (loggedScanKeys.has(dedupeKey)) return true;
     loggedScanKeys.add(dedupeKey);
@@ -581,13 +953,15 @@
       step: stepName,
       staffId: currentUser ? currentUser.staffId : '-',
       staffName: currentUser ? `${currentUser.name} (${currentUser.role})` : '-',
-      hn: qrInfo.hn,
+      hn: qrInfo.hn || '-',
+      qn: qrInfo.qn || '-',
+      orderDate: qrInfo.dateDisplay,
       dept: qrInfo.dept,
       drugCode: drugCode || qrInfo.code || '-',
       expectedDrug: expectedDrug || '-',
       actualDrug: actualDrug || '-',
       location: location || '-',
-      note: note || '-'
+      note: qrInfo.qn ? `[HN: ${qrInfo.hn || '-'} | QN: ${qrInfo.qn} | วันที่: ${qrInfo.dateDisplay}] ${note || ''}`.trim() : (note || '-')
     };
 
     fetch(APPS_SCRIPT_URL, {
@@ -624,7 +998,7 @@
     }
   }
 
-  // ================= STEP 1: กล้อง + ล็อกค่า QR + อ่าน OCR อัตโนมัติ =================
+  // ================= STEP 1: กล้อง + ล็อกค่า QR + อ่าน OCR อัตโนมัติ (ครบ 6 ค่า) =================
   async function startStep1Camera() {
     if (!currentUser) return;
     isProcessing = false;
@@ -704,27 +1078,34 @@
 
   function renderLockedQrUI() {
     if (!lockedQrData) return;
-    const code = parseQrDetails(lockedQrData).code;
+    const qrInfo = parseQrDetails(lockedQrData);
+    const code = qrInfo.code;
     const drug = DRUG_DB[code] || null;
     const locHtml = (drug && drug.location)
       ? `<br>ตำแหน่ง: <span class="loc-badge">📍 ${drug.location}</span>`
       : '';
+    const hnHtml = qrInfo.hn
+      ? `<br>HN: <span class="hn-badge">${qrInfo.hn}</span>`
+      : '<br>HN: <span style="color:#64748b;">-</span>';
+    const qnHtml = qrInfo.qn
+      ? ` • QN: <span class="qn-badge">${qrInfo.qn}</span>`
+      : ' • QN: <span style="color:#64748b;">-</span>';
 
     if (ocrProgress.isComplete) {
-      liveBadge.textContent = `✅ อ่านครบ 4/4 ค่าแล้ว! (รหัสยา: ${code})`;
+      liveBadge.textContent = `✅ อ่านครบ 6/6 ค่าแล้ว! (รหัส: ${code} | HN: ${qrInfo.hn || '-'})`;
       liveBadge.style.background = 'rgba(22, 163, 74, 0.95)';
       guideHint.textContent = 'กดปุ่มสีม่วงด้านล่างเพื่อไป Step 2';
     } else {
-      liveBadge.textContent = `🔒 ล็อก QR สำเร็จ (${code}) • กำลังอ่าน OCR อัตโนมัติ...`;
+      liveBadge.textContent = `🔒 ล็อก QR (${code} | HN: ${qrInfo.hn || '-'}) • กำลังอ่าน OCR...`;
       liveBadge.style.background = 'rgba(2, 132, 199, 0.95)';
-      guideHint.textContent = 'ขยับมุมกล้องเล็กน้อยหากแสงสะท้อนจนครบ 4 ค่า';
+      guideHint.textContent = 'ขยับมุมกล้องเล็กน้อยหากแสงสะท้อนจนครบ 6 ค่า';
     }
 
     document.getElementById('compareGrid').style.display = 'grid';
     document.getElementById('unlockQrBtn').style.display = 'inline-block';
     document.getElementById('qrResultText').innerHTML =
       `🔒 ล็อกรหัสยา: <b>${code}</b><br>` +
-      `${drug ? `<span style="color:#059669; font-weight:bold;">${drug.name}</span>${locHtml}` : '<span style="color:#d97706;">(ไม่มีรหัสนี้ใน Google Sheets)</span>'}`;
+      `${drug ? `<span style="color:#059669; font-weight:bold;">${drug.name}</span>${locHtml}${hnHtml}${qnHtml}` : `<span style="color:#d97706;">(ไม่มีรหัสนี้ใน Google Sheets)</span>${hnHtml}${qnHtml}`}`;
   }
 
   function unlockQr() {
@@ -751,10 +1132,18 @@
       const foundQr = await detectQrFromCanvas(frameCanvas);
 
       if (foundQr) {
+        clearInterval(autoScanTimer);
+        // ตรวจสอบ Batch (HN + QN + วันที่) ก่อนเริ่มอ่าน OCR
+        const canProceed = syncBatchWithQr(foundQr);
+        if (!canProceed) {
+          statusEl.textContent = '⚠️ พบซองยาคนละ HN / QN หรือคนละวันที่ กรุณายืนยันด้านบน';
+          statusEl.style.color = '#dc2626';
+          return;
+        }
+
         lockedQrData = foundQr;
         ocrProgress = createEmptyOcrState();
         ocrProgress.qrCode = foundQr;
-        clearInterval(autoScanTimer);
         renderLockedQrUI();
         await processFullFrame(frameCanvas, true);
         if (autoOcrEnabled && !ocrProgress.isComplete && !ocrProgress.hasConflict) {
@@ -764,31 +1153,78 @@
     }, 350);
   }
 
+  // ตรวจสอบว่า OCR อ่านพบเลข QN ตรงกับ QR Code หรือไม่ (เช่น หลัง [150] 37 หรือ QN 37)
+  function checkQnInOcr(rawOcr, matchedLine, expectedQn) {
+    if (!expectedQn) return true;
+    const target = String(expectedQn).trim().toLowerCase();
+    const escaped = target.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    const afterBracketRegex = new RegExp(`[\\]\\)\\}]\\s*${escaped}(?:\\b|\\s|$)`, 'i');
+    if (afterBracketRegex.test(rawOcr)) return true;
+
+    const qnLabelRegex = new RegExp(`(?:qn|คิว)\\s*[:=\\-]?\\s*${escaped}(?:\\b|\\s|$)`, 'i');
+    if (qnLabelRegex.test(rawOcr)) return true;
+
+    const tokenRegex = new RegExp(`(?:^|\\s|[\\[\\(\\{\\/\\-])${escaped}(?:$|\\s|[\\]\\)\\}\\/\\-])`, 'i');
+    if (matchedLine && tokenRegex.test(matchedLine)) return true;
+    if (tokenRegex.test(rawOcr)) return true;
+
+    return false;
+  }
+
+  // ตรวจสอบว่า OCR อ่านพบเลข HN บนหน้าซองตรงกับ QR Code หรือไม่ (รองรับทั้งแบบมีขีด 65-12345 และไม่มีขีด 6512345)
+  function checkHnInOcr(rawOcr, expectedHn) {
+    if (!expectedHn) return true;
+    const cleanExpected = String(expectedHn).trim().replace(/[\s\-]/g, '');
+    if (!cleanExpected) return true;
+
+    // 1. เช็กแบบตัวเลขติดกัน (ตัดขีดและช่องว่างออก) เพื่อรองรับ 65-12345 vs 6512345
+    const digitsOnlyOcr = rawOcr.replace(/[\s\-]/g, '');
+    const escapedClean = cleanExpected.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const boundaryRegex = new RegExp(`(?:^|[^0-9a-zA-Z])${escapedClean}(?:$|[^0-9a-zA-Z])`, 'i');
+    if (boundaryRegex.test(digitsOnlyOcr)) return true;
+
+    // 2. เช็กแบบมีคำนำหน้า HN เช่น "HN 6512345", "HN: 65-12345"
+    const rawEscaped = String(expectedHn).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const hnLabelRegex = new RegExp(`(?:hn|h\\.n\\.)\\s*[:=\\-]?\\s*${rawEscaped}`, 'i');
+    if (hnLabelRegex.test(rawOcr)) return true;
+
+    return false;
+  }
+
   async function processFullFrame(fullCanvas, isAuto = false) {
     if (isProcessing) return;
     isProcessing = true;
     document.getElementById('scanBtn').disabled = true;
 
     statusEl.textContent = isAuto
-      ? '🤖 กำลังอ่าน OCR อัตโนมัติ...'
+      ? '🤖 กำลังอ่าน OCR อัตโนมัติ (ตรวจครบ 6 ค่า)...'
       : '⏳ กำลังอ่านตัวอักษรหน้าซอง (OCR) เพื่อเทียบกับ QR...';
     statusEl.style.color = '#0284c7';
 
     if (!lockedQrData) {
       const found = await detectQrFromCanvas(fullCanvas);
       if (found) {
-        lockedQrData = found;
         if (autoScanTimer) clearInterval(autoScanTimer);
+        const canProceed = syncBatchWithQr(found);
+        if (!canProceed) {
+          document.getElementById('scanBtn').disabled = false;
+          isProcessing = false;
+          return;
+        }
+        lockedQrData = found;
       }
     }
 
-    // หากเปลี่ยนซอง (QR ใหม่) ให้รีเซ็ตสถานะสะสม OCR
     if (lockedQrData && ocrProgress.qrCode !== lockedQrData) {
       ocrProgress = createEmptyOcrState();
       ocrProgress.qrCode = lockedQrData;
     }
 
-    const extractedDrugCode = parseQrDetails(lockedQrData).code;
+    const qrInfo = parseQrDetails(lockedQrData);
+    const extractedDrugCode = qrInfo.code;
+    const expectedQn = qrInfo.qn;
+    const expectedHn = qrInfo.hn;
 
     let rawOcr = '';
     try {
@@ -800,7 +1236,6 @@
       const ocrCtx = ocrCanvas.getContext('2d');
       ocrCtx.drawImage(fullCanvas, 0, 0, ocrW, ocrH);
 
-      // ปรับภาพเป็นขาวดำและเพิ่ม Contrast เพื่อให้อ่านชื่อยา ความแรง จำนวน และตำแหน่งแม่นยำขึ้น
       const imgData = ocrCtx.getImageData(0, 0, ocrW, ocrH);
       const d = imgData.data;
       const contrast = 1.4;
@@ -835,7 +1270,7 @@
       matchedLine = lines.find(line => drugFromOCR.ocrKeywords.some(k => line.toLowerCase().includes(k))) || '';
     }
 
-    // 2. แยก "ชื่อยา" และ "ความแรง" จากรายการยาเป้าหมาย (drugFromQR)
+    // 2. แยก "ชื่อยา" และ "ความแรง" จากรายการยาเป้าหมาย
     const strengthRegex = /(\d+(?:\.\d+)?\s*(?:mg|g|mcg|ml|%|iu|meq|mmol)(?:\/\d*(?:\.\d+)?\s*(?:ml|mg|g))?)/gi;
     let expectedStrengths = [];
     let expectedNameWords = [];
@@ -851,7 +1286,7 @@
         .filter(w => w.length >= 3);
     }
 
-    // ตรวจสอบ "ชื่อยา" ในรอบนี้ -> หากผ่านแล้วบันทึกสะสมลง ocrProgress
+    // ค่าที่ 1: ชื่อยา
     const thisNameMatched = drugFromQR
       ? (expectedNameWords.length > 0
           ? expectedNameWords.every(w => fullLower.includes(w))
@@ -865,7 +1300,7 @@
         : drugFromOCR.name;
     }
 
-    // ตรวจสอบ "ความแรง" ในรอบนี้ -> หากผ่านแล้วบันทึกสะสมลง ocrProgress
+    // ค่าที่ 2: ความแรง
     let thisStrengthMatched = false;
     let thisStrengthValue = '';
     if (drugFromQR) {
@@ -891,7 +1326,7 @@
       ocrProgress.strengthValue = thisStrengthValue;
     }
 
-    // 3. ดึง "จำนวนยา" ในรอบนี้ -> หากจับตัวเลขได้แล้วบันทึกสะสมลง ocrProgress
+    // ค่าที่ 3: จำนวนยา
     const searchScope = matchedLine || rawOcr;
     const qtyMatch =
       searchScope.match(/[\[\(\{]\s*(\d{1,4})\s*[\]\)\}]/) ||
@@ -902,7 +1337,7 @@
       ocrProgress.qtyValue = qtyMatch[1];
     }
 
-    // 4. ตรวจสอบ "ตำแหน่งจัดเก็บยา" ในรอบนี้ -> หากอ่านตรงกับฐานข้อมูลแล้วบันทึกสะสมลง ocrProgress
+    // ค่าที่ 4: ตำแหน่งจัดเก็บยา
     const shelfLocation = (drugFromQR && drugFromQR.location) ? drugFromQR.location.trim() : '';
     const compactLoc = shelfLocation.toLowerCase().replace(/\s+/g, '');
 
@@ -914,23 +1349,49 @@
       ocrProgress.locValue = shelfLocation;
     }
 
+    // ค่าที่ 5: เลขคิว QN (เทียบกับ QR Code)
+    if (drugFromQR) {
+      if (!expectedQn) {
+        ocrProgress.qnPassed = true;
+        ocrProgress.qnValue = '-';
+      } else if (checkQnInOcr(rawOcr, matchedLine, expectedQn)) {
+        ocrProgress.qnPassed = true;
+        ocrProgress.qnValue = expectedQn;
+      }
+    }
+
+    // ค่าที่ 6: เลขประจำตัวผู้ป่วย HN (เทียบกับ QR Code)
+    if (drugFromQR) {
+      if (!expectedHn) {
+        ocrProgress.hnPassed = true;
+        ocrProgress.hnValue = '-';
+      } else if (checkHnInOcr(rawOcr, expectedHn)) {
+        ocrProgress.hnPassed = true;
+        ocrProgress.hnValue = expectedHn;
+      }
+    }
+
     const locationBadgeHtml = shelfLocation
       ? `<span class="loc-badge">📍 ${shelfLocation}</span>`
       : '';
 
-    // แสดงสถานะสะสมทั้ง 4 รายการ
+    // แสดงสถานะสะสมทั้ง 6 รายการ
     const displayDrugName = ocrProgress.namePassed
       ? ocrProgress.nameValue
       : (drugFromOCR ? `${drugFromOCR.name} (ไม่ตรง QR)` : 'กำลังอ่าน...');
     const displayStrength = ocrProgress.strengthPassed ? ocrProgress.strengthValue : 'กำลังอ่าน...';
     const displayQty = ocrProgress.qtyPassed ? ocrProgress.qtyValue : 'กำลังอ่าน...';
     const displayLoc = ocrProgress.locPassed ? ocrProgress.locValue : 'กำลังอ่าน...';
+    const displayQn = ocrProgress.qnPassed ? ocrProgress.qnValue : `กำลังหา QN ${expectedQn || ''}...`;
+    const displayHn = ocrProgress.hnPassed ? ocrProgress.hnValue : `กำลังหา HN ${expectedHn || ''}...`;
 
     document.getElementById('ocrResultText').innerHTML =
       `<div>${ocrProgress.namePassed ? '✅' : '⏳'} ชื่อยา: <b>${displayDrugName}</b></div>` +
       `<div>${ocrProgress.strengthPassed ? '✅' : '⏳'} ความแรง: <b>${displayStrength}</b></div>` +
       `<div>${ocrProgress.qtyPassed ? '✅' : '⏳'} จำนวน: <b style="color:${ocrProgress.qtyPassed ? '#15803d' : '#d97706'};">${displayQty}</b></div>` +
-      `<div>${ocrProgress.locPassed ? '✅' : '⏳'} ตำแหน่ง: <b>${displayLoc}</b></div>`;
+      `<div>${ocrProgress.locPassed ? '✅' : '⏳'} ตำแหน่ง: <b>${displayLoc}</b></div>` +
+      `<div>${ocrProgress.qnPassed ? '✅' : '⏳'} คิว (QN): <b style="color:${ocrProgress.qnPassed ? '#15803d' : '#d97706'};">${displayQn}</b></div>` +
+      `<div>${ocrProgress.hnPassed ? '✅' : '⏳'} HN ผู้ป่วย: <b style="color:${ocrProgress.hnPassed ? '#15803d' : '#d97706'};">${displayHn}</b></div>`;
 
     const verdictBox = document.getElementById('verdictBox');
     const verdictMsg = document.getElementById('verdictMsg');
@@ -939,13 +1400,19 @@
     goBtn.style.display = 'none';
 
     const isDifferentDrug = drugFromQR && drugFromOCR && drugFromQR.code !== drugFromOCR.code && !ocrProgress.namePassed;
-    const isAllFourComplete = Boolean(
+    const isAllSixComplete = Boolean(
       drugFromQR &&
       ocrProgress.namePassed &&
       ocrProgress.strengthPassed &&
       ocrProgress.qtyPassed &&
-      ocrProgress.locPassed
+      ocrProgress.locPassed &&
+      ocrProgress.qnPassed &&
+      ocrProgress.hnPassed
     );
+
+    const alreadyInBatch = drugFromQR
+      ? currentBatch.items.find(it => it.code === drugFromQR.code)
+      : null;
 
     if (isDifferentDrug) {
       ocrProgress.hasConflict = true;
@@ -965,18 +1432,26 @@
         (isLogged ? `<br><span class="log-badge">📝 บันทึกสถิติ Near-Miss ลงชีตแล้ว</span>` : '');
       statusEl.textContent = '🚨 พบข้อมูลฉลากไม่ตรงกับ QR';
       statusEl.style.color = '#dc2626';
-    } else if (isAllFourComplete) {
+    } else if (isAllSixComplete) {
       ocrProgress.isComplete = true;
       stopAutoOcrLoop();
       playSound('pass');
-      activeOrder = { ...drugFromQR, qty: ocrProgress.qtyValue, location: shelfLocation };
+      activeOrder = {
+        ...drugFromQR,
+        qty: ocrProgress.qtyValue,
+        location: shelfLocation,
+        hn: qrInfo.hn || '-',
+        qn: qrInfo.qn || '-',
+        dateDisplay: qrInfo.dateDisplay
+      };
       verdictBox.className = 'verdict-box verdict-pass';
       verdictMsg.innerHTML =
-        `✅ <b>ยืนยัน OCR ครบทั้ง 4 รายการตรงตาม QR!</b> (รหัส ${drugFromQR.code})<br>` +
+        `✅ <b>ยืนยัน OCR ครบทั้ง 6 รายการตรงตาม QR!</b> (HN: ${qrInfo.hn || '-'} | QN: ${qrInfo.qn || '-'})<br>` +
         `จัดยา: <b>${drugFromQR.name}</b> จำนวน <b>${ocrProgress.qtyValue}</b>` +
-        (locationBadgeHtml ? `<div style="margin-top:6px; font-size:15px;">ตำแหน่งจัดเก็บยา: ${locationBadgeHtml}</div>` : '');
+        (locationBadgeHtml ? `<div style="margin-top:6px; font-size:15px;">ตำแหน่งจัดเก็บยา: ${locationBadgeHtml}</div>` : '') +
+        (alreadyInBatch ? `<div style="margin-top:6px; padding:4px 8px; background:#fef3c7; color:#92400e; border-radius:6px; font-size:12px;">⚠️ ยารหัสนี้เคยตรวจผ่านแล้วใน HN ${currentBatch.hn} / QN ${currentBatch.qn} (จำนวน ${alreadyInBatch.qty})</div>` : '');
       goBtn.style.display = 'block';
-      statusEl.textContent = '✅ อ่าน OCR ครบทั้ง 4 ค่าเรียบร้อย!';
+      statusEl.textContent = '✅ อ่าน OCR ครบทั้ง 6 ค่าเรียบร้อย!';
       statusEl.style.color = '#059669';
     } else if (drugFromQR) {
       const missingItems = [];
@@ -984,15 +1459,18 @@
       if (!ocrProgress.strengthPassed) missingItems.push(`ความแรง (${expectedStrengths.join(', ')})`);
       if (!ocrProgress.qtyPassed) missingItems.push('จำนวนยา');
       if (!ocrProgress.locPassed) missingItems.push(`ตำแหน่ง (${shelfLocation})`);
+      if (!ocrProgress.qnPassed) missingItems.push(`เลขคิว QN (${expectedQn})`);
+      if (!ocrProgress.hnPassed) missingItems.push(`เลข HN (${expectedHn})`);
 
-      const passedCount = 4 - missingItems.length;
+      const passedCount = 6 - missingItems.length;
       verdictBox.className = 'verdict-box verdict-warn';
       verdictMsg.innerHTML =
-        `⏳ <b>ผ่านแล้ว ${passedCount}/4 รายการ</b> — เหลืออีก: <b>${missingItems.join(', ')}</b><br>` +
+        `⏳ <b>ผ่านแล้ว ${passedCount}/6 รายการ</b> — เหลืออีก: <b>${missingItems.join(', ')}</b><br>` +
+        (alreadyInBatch ? `<small style="color:#b45309; font-weight:bold;">⚠️ ยารหัสนี้ตรวจผ่านแล้วใน HN ${currentBatch.hn} / QN ${currentBatch.qn}</small><br>` : '') +
         `<small style="display:block; margin-top:4px;">${autoOcrEnabled ? '🤖 ระบบกำลังสแกน OCR อัตโนมัติต่อเนื่อง ส่องให้เห็นส่วนที่เหลือได้เลย' : '⏸️ ปิด OCR อัตโนมัติอยู่ กดปุ่ม "📸 ถ่ายอ่านทันที" เพื่ออ่านเพิ่ม'}</small>`;
       statusEl.textContent = autoOcrEnabled
-        ? `🤖 อ่านอัตโนมัติต่อเนื่อง (${passedCount}/4 รายการ)...`
-        : `⏸️ ผ่านแล้ว ${passedCount}/4 รายการ`;
+        ? `🤖 อ่านอัตโนมัติต่อเนื่อง (${passedCount}/6 รายการ)...`
+        : `⏸️ ผ่านแล้ว ${passedCount}/6 รายการ`;
       statusEl.style.color = '#0284c7';
     } else if (lockedQrData && !drugFromQR) {
       stopAutoOcrLoop();
@@ -1086,7 +1564,7 @@
 
     const currentDrugRecord = DRUG_DB[activeOrder.code];
 
-    // 1. กรณีสแกนถูกต้อง (PASS) -> บันทึกผล PASS ลงชีตด้วย
+    // 1. กรณีสแกนถูกต้อง (PASS) -> บันทึกผล PASS ลงชีต + สะสมรายการเข้า Batch ปัจจุบัน
     if (currentDrugRecord.barcodes.includes(scannedCode)) {
       playSound('pass');
       const isLogged = logVerificationToSheet(
@@ -1098,12 +1576,25 @@
         activeOrder.location || '-',
         `จำนวนจัดยา: ${activeOrder.qty}`
       );
+
+      if (!activeOrder.addedToBatch) {
+        activeOrder.addedToBatch = true;
+        currentBatch.items.push({
+          code: currentDrugRecord.code,
+          name: currentDrugRecord.name,
+          qty: activeOrder.qty,
+          location: activeOrder.location || '-',
+          time: new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })
+        });
+        renderBatchUI();
+      }
+
       resBox.className = 'verify-result verify-pass';
       icon.textContent = '✅';
       title.textContent = 'ถูกต้อง! ยาตรงตามใบสั่ง';
       detail.innerHTML =
         `หยิบ <b>${currentDrugRecord.name}</b> (รหัส ${currentDrugRecord.code})<br>` +
-        `จำนวน <b style="font-size:20px;">${activeOrder.qty}</b> หน่วย` +
+        `จำนวน <b style="font-size:20px;">${activeOrder.qty}</b> หน่วย • HN: <b>${activeOrder.hn || '-'}</b> • QN: <b>${activeOrder.qn || '-'}</b>` +
         (activeOrder.location
           ? `<br><span class="loc-badge" style="margin-top:6px;">📍 ตำแหน่ง: ${activeOrder.location}</span>`
           : '') +
@@ -1150,7 +1641,7 @@
       (isLoggedUnknown ? `<br><span class="log-badge">📝 บันทึกผลการสแกนลงชีตแล้ว</span>` : '');
   }
 
-  async function resetAll() {
+  async function resetAll(clearBatch = false) {
     if (autoScanTimer) clearInterval(autoScanTimer);
     stopAutoOcrLoop();
     if (html5QrCode && html5QrCode.isScanning) await html5QrCode.stop();
@@ -1158,6 +1649,10 @@
     lockedQrData = '';
     ocrProgress = createEmptyOcrState();
     loggedScanKeys.clear();
+    if (clearBatch) {
+      currentBatch = { hn: '', qn: '', dateKey: '', dateDisplay: '', dept: '', items: [] };
+      renderBatchUI();
+    }
     document.getElementById('unlockQrBtn').style.display = 'none';
     document.getElementById('compareGrid').style.display = 'none';
     document.getElementById('verdictBox').style.display = 'none';
