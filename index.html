@@ -521,15 +521,11 @@
       <form id="loginForm">
         <div class="form-group">
           <label for="staffIdInput">รหัสผู้ปฏิบัติงาน (Staff ID)</label>
-          <input type="text" id="staffIdInput" placeholder="กรอกรหัสพนักงาน / นศภ." required autocomplete="off" />
+          <input type="text" id="staffIdInput" inputmode="numeric" pattern="[0-9]*" oninput="this.value = this.value.replace(/[^0-9]/g, '')" placeholder="กรอกรหัสตัวเลขเท่านั้น" required autocomplete="off" />
         </div>
         <div class="form-group">
           <label for="pinInput">รหัสผ่าน (PIN)</label>
-          <input type="password" id="pinInput" inputmode="numeric" placeholder="กรอกรหัส PIN" required />
-        </div>
-        <div class="form-group">
-          <label for="deptInput">จุดปฏิบัติงาน / ห้องจ่ายยา (ไม่บังคับ)</label>
-          <input type="text" id="deptInput" placeholder="เช่น IPD ชั้น 2 / OPD" />
+          <input type="password" id="pinInput" inputmode="numeric" pattern="[0-9]*" oninput="this.value = this.value.replace(/[^0-9]/g, '')" placeholder="กรอกรหัส PIN ตัวเลขเท่านั้น" required />
         </div>
         <button type="submit" id="loginBtn" class="btn-primary">เข้าสู่ระบบ</button>
         <div id="loginError" class="error-msg"></div>
@@ -680,7 +676,7 @@
       e.preventDefault();
       const staffId = document.getElementById('staffIdInput').value.trim();
       const pin = document.getElementById('pinInput').value.trim();
-      const dept = document.getElementById('deptInput').value.trim() || "-";
+      const dept = "-";
       const btn = document.getElementById('loginBtn');
       const errBox = document.getElementById('loginError');
 
