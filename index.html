@@ -526,11 +526,12 @@
     return null;
   }
 
-  // แยกข้อมูลจาก QR Code: อ่านเฉพาะ HN, QN (เช่น 150), วันที่, หอผู้ป่วย และรหัสยา (ไม่ตรวจเลขช่องจ่ายยา)
+  // แยกข้อมูลจาก QR Code ตามโครงสร้างจริงของโรงพยาบาล:
+  // รูปแบบ 5 ช่อง: HN | วันที่ | ช่องจ่ายยา | QN | รหัสยา (เช่น 2133779|2026-11-03|37|150|1564)
   function parseQrDetails(rawQr) {
     const today = getTodayDateInfo();
     if (!rawQr) {
-      return { hn: '', qn: '', dateKey: today.dateKey, dateDisplay: today.dateDisplay, dept: '-', code: '' };
+      return { hn: '', qn: '', windowNo: '', dateKey: today.dateKey, dateDisplay: today.dateDisplay, dept: '-', code: '' };
     }
 
     if (rawQr.includes('|')) {
@@ -541,28 +542,59 @@
 
       let resolvedDate = today;
       let qnCandidate = '';
+      let windowCandidate = '';
       const textTokens = [];
 
-      const middleParts = parts.slice(1, -1);
-      for (const part of middleParts) {
-        if (!part || part === '-') continue;
-        const parsedDate = normalizeDateFromToken(part);
-        if (parsedDate) {
-          resolvedDate = parsedDate;
-          continue;
+      // กรณีรูปแบบมาตรฐาน 5 ช่อง: [0:HN] | [1:วันที่] | [2:ช่องจ่ายยา/หอผู้ป่วย] | [3:QN] | [4:รหัสยา]
+      if (parts.length >= 5) {
+        const parsedDate = normalizeDateFromToken(parts[1]);
+        if (parsedDate) resolvedDate = parsedDate;
+
+        const slot3 = parts[2] || '';
+        const slot4 = parts[3] || '';
+
+        if (slot3 && slot3 !== '-') {
+          if (/^[a-z]?\d{1,4}$/i.test(slot3)) {
+            windowCandidate = slot3;
+          } else {
+            textTokens.push(slot3);
+          }
         }
-        const qnPrefix = part.match(/^qn\s*[:=\-]?\s*([a-z0-9\-]+)$/i);
-        if (qnPrefix) {
-          qnCandidate = qnPrefix[1];
-          continue;
+        if (slot4 && slot4 !== '-') {
+          qnCandidate = slot4.replace(/^qn\s*[:=\-]?\s*/i, '').trim();
         }
-        // อ่านเฉพาะเลขคิว QN ตัวแรกหลัง HN (เช่น 150) — ไม่ตรวจเลขช่องจ่ายยา
-        if (!qnCandidate && /^[a-z]?\d{1,6}$/i.test(part)) {
-          qnCandidate = part;
-          continue;
-        }
-        if (!/^(?:ช่อง|win|window|ch)\s*[:=\-]?\s*[a-z0-9\-]+$/i.test(part)) {
+      } else {
+        // กรณีรูปแบบย่อ (เช่น ไม่มีช่องจ่ายยา: HN|วันที่|QN|รหัสยา)
+        const middleParts = parts.slice(1, -1);
+        const numericTokens = [];
+
+        for (const part of middleParts) {
+          if (!part || part === '-') continue;
+          const parsedDate = normalizeDateFromToken(part);
+          if (parsedDate) {
+            resolvedDate = parsedDate;
+            continue;
+          }
+          const qnPrefix = part.match(/^qn\s*[:=\-]?\s*([a-z0-9\-]+)$/i);
+          if (qnPrefix) {
+            qnCandidate = qnPrefix[1];
+            continue;
+          }
+          if (/^[a-z]?\d{1,6}$/i.test(part)) {
+            numericTokens.push(part);
+            continue;
+          }
           textTokens.push(part);
+        }
+
+        if (!qnCandidate && numericTokens.length > 0) {
+          // หากมีตัวเลข 2 ตัว (เช่น 37 และ 150) ตัวแรกคือช่องจ่ายยา ตัวที่สองคือ QN; หากมีตัวเดียวคือ QN
+          if (numericTokens.length >= 2) {
+            windowCandidate = numericTokens[0];
+            qnCandidate = numericTokens[1];
+          } else {
+            qnCandidate = numericTokens[0];
+          }
         }
       }
 
@@ -571,6 +603,7 @@
       return {
         hn,
         qn: qnCandidate,
+        windowNo: windowCandidate,
         dateKey: resolvedDate.dateKey,
         dateDisplay: resolvedDate.dateDisplay,
         dept,
@@ -581,6 +614,7 @@
     return {
       hn: '',
       qn: '',
+      windowNo: '',
       dateKey: today.dateKey,
       dateDisplay: today.dateDisplay,
       dept: '-',
