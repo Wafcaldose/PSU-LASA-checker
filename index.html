@@ -1,1089 +1,949 @@
 <!DOCTYPE html>
 <html lang="th">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>PSU LASA Verification</title>
-  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <!-- jsQR สำหรับอ่าน QR Code บนซองยาแบบ Real-time -->
-  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-  <!-- Tesseract.js สำหรับอ่านข้อความ OCR หน้าซองยา -->
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <!-- ZXing สำหรับสแกนบาร์โค้ด 1D ข้างกล่องยาใน Step 2 -->
-  <script src="https://unpkg.com/@zxing/library@0.20.0/umd/index.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <style>
-    :root {
-      --bg: #f1f5f9;
-      --card: #ffffff;
-      --text: #0f172a;
-      --muted: #64748b;
-      --blue: #0284c7;
-      --blue-dark: #0369a1;
-      --blue-soft: #e0f2fe;
-      --green: #16a34a;
-      --green-soft: #dcfce7;
-      --green-border: #22c55e;
-      --purple: #7c3aed;
-      --purple-dark: #6d28d9;
-      --red: #dc2626;
-      --red-soft: #fee2e2;
-      --slate: #475569;
-      --border: #e2e8f0;
-    }
-
-    * {
-      box-sizing: border-box;
-      font-family: 'Sarabun', -apple-system, BlinkMacSystemFont, sans-serif;
-    }
-
     body {
-      margin: 0;
-      background: var(--bg);
-      color: var(--text);
-      padding: 12px;
-      display: flex;
-      justify-content: center;
+      font-family: 'Sarabun', sans-serif;
+      background-color: #f1f5f9;
+      margin: 0; padding: 12px;
+      display: flex; flex-direction: column; align-items: center;
     }
-
-    .app-container {
-      width: 100%;
-      max-width: 480px;
+    .container { width: 100%; max-width: 500px; }
+    .card {
+      background: #fff; border-radius: 14px; padding: 14px;
+      margin-bottom: 14px; box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+      border-top: 6px solid #0284c7;
     }
-
-    /* ================= LOGIN SCREEN ================= */
-    .login-card {
-      background: var(--card);
-      border-radius: 16px;
-      padding: 24px 20px;
-      box-shadow: 0 4px 20px rgba(15, 23, 42, 0.08);
-      border-top: 5px solid var(--blue);
+    .card.login-card {
+      padding: 22px 18px;
       margin-top: 24px;
     }
-
-    .login-header {
-      text-align: center;
-      margin-bottom: 20px;
-    }
-
-    .login-header h1 {
-      margin: 0 0 6px 0;
-      font-size: 22px;
-      color: var(--blue-dark);
-    }
-
-    .login-header p {
-      margin: 0;
-      font-size: 14px;
-      color: var(--muted);
-    }
-
-    .form-group {
-      margin-bottom: 14px;
-    }
-
-    .form-group label {
-      display: block;
-      font-size: 14px;
-      font-weight: 600;
-      margin-bottom: 6px;
-      color: #334155;
-    }
-
-    .form-group input, .form-group select {
-      width: 100%;
-      padding: 11px 14px;
-      border: 1.5px solid #cbd5e1;
-      border-radius: 10px;
-      font-size: 16px;
-      outline: none;
-      transition: border-color 0.2s;
-    }
-
-    .form-group input:focus {
-      border-color: var(--blue);
-    }
-
-    .btn-primary {
-      width: 100%;
-      padding: 13px;
-      background: var(--blue);
-      color: #fff;
-      border: none;
-      border-radius: 10px;
-      font-size: 16px;
-      font-weight: 700;
-      cursor: pointer;
-    }
-
-    .btn-primary:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-    }
-
-    .error-msg {
-      color: var(--red);
-      background: var(--red-soft);
-      padding: 10px 12px;
-      border-radius: 8px;
-      font-size: 14px;
-      margin-top: 12px;
-      display: none;
-      text-align: center;
-    }
-
-    /* ================= TOP USER BAR ================= */
-    .user-bar {
-      background: var(--card);
-      border-radius: 12px;
+    .card.user-card {
+      border-top-color: #0284c7;
       padding: 10px 14px;
-      margin-bottom: 12px;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
-      font-size: 13px;
     }
+    .card.db-card { border-top-color: #10b981; padding: 12px 14px; }
+    .card.step2 { border-top-color: #7c3aed; }
+    .card.disabled { opacity: 0.45; pointer-events: none; }
+    h2 { margin: 0 0 4px 0; font-size: 18px; color: #0f172a; }
+    p.sub { margin: 0 0 10px 0; font-size: 13px; color: #475569; }
 
-    .user-info strong {
-      display: block;
-      font-size: 14px;
-      color: var(--text);
+    /* Login Styles */
+    .form-group { margin-bottom: 14px; }
+    .form-group label {
+      display: block; font-size: 14px; font-weight: bold;
+      margin-bottom: 6px; color: #1e293b;
     }
-
-    .user-info span {
-      color: var(--muted);
-      font-size: 12px;
+    .form-group input {
+      width: 100%; box-sizing: border-box;
+      padding: 12px 14px; font-size: 16px;
+      border: 1.5px solid #cbd5e1; border-radius: 8px;
+      outline: none;
     }
-
-    .user-actions {
-      display: flex;
-      align-items: center;
-      gap: 8px;
+    .form-group input:focus { border-color: #0284c7; }
+    .login-error {
+      margin-top: 10px; padding: 10px; border-radius: 8px;
+      background: #fee2e2; color: #b91c1c; font-size: 13px;
+      font-weight: bold; text-align: center; display: none;
     }
-
-    .db-badge {
-      background: var(--green-soft);
-      color: var(--green);
-      font-weight: 700;
-      padding: 4px 8px;
-      border-radius: 999px;
-      font-size: 12px;
-    }
-
     .btn-logout {
-      background: #f1f5f9;
-      border: 1px solid #cbd5e1;
-      color: #475569;
-      padding: 5px 10px;
-      border-radius: 8px;
-      font-size: 12px;
-      font-weight: 600;
-      cursor: pointer;
+      flex: none; width: auto; padding: 6px 12px; font-size: 12px;
+      background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1;
+      border-radius: 8px; cursor: pointer;
     }
 
-    /* ================= STEP CARDS (แบบเก่าตามภาพ) ================= */
-    .step-card {
-      background: var(--card);
-      border-radius: 16px;
-      padding: 16px;
-      box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
-      margin-bottom: 14px;
-    }
-
-    .step1-border {
-      border-top: 5px solid var(--blue);
-    }
-
-    .step2-border {
-      border-top: 5px solid var(--purple);
-    }
-
-    .step-title {
-      font-size: 19px;
-      font-weight: 700;
-      margin: 0 0 4px 0;
-      color: var(--text);
-    }
-
-    .step-subtitle {
-      font-size: 13.5px;
-      color: var(--muted);
-      margin: 0 0 12px 0;
-      line-height: 1.4;
-    }
-
-    /* กล้อง Step 1 */
-    .camera-box {
+    .camera-wrapper {
       position: relative;
       width: 100%;
       aspect-ratio: 4 / 3;
-      background: #090d16;
-      border-radius: 14px;
+      background: #000;
+      border-radius: 12px;
       overflow: hidden;
-      margin-bottom: 12px;
     }
-
-    .camera-box video {
+    video {
       width: 100%;
       height: 100%;
       object-fit: cover;
-      display: block;
     }
-
-    .dashed-guide {
+    .full-frame-guide {
       position: absolute;
       inset: 10px;
-      border: 2px dashed rgba(255, 255, 255, 0.75);
-      border-radius: 10px;
+      border: 2px dashed rgba(255, 255, 255, 0.7);
+      border-radius: 8px;
       pointer-events: none;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
       align-items: center;
-      padding: 10px;
+      padding: 8px;
     }
-
-    .pill-top {
-      background: rgba(2, 132, 199, 0.92);
+    .live-badge {
+      background: rgba(2, 132, 199, 0.9);
       color: #fff;
-      font-size: 13px;
-      font-weight: 600;
-      padding: 6px 14px;
-      border-radius: 999px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-    }
-
-    .pill-bottom {
-      background: rgba(15, 23, 42, 0.82);
-      color: #e2e8f0;
       font-size: 12px;
-      padding: 5px 12px;
-      border-radius: 999px;
-    }
-
-    /* ปุ่มคู่ใต้กล้อง Step 1 */
-    .btn-row {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-      margin-bottom: 10px;
-    }
-
-    .btn-capture {
-      background: var(--blue);
-      color: #fff;
-      border: none;
-      border-radius: 10px;
-      padding: 12px 10px;
-      font-size: 15px;
-      font-weight: 700;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 6px;
-    }
-
-    .btn-upload {
-      background: #e2e8f0;
-      color: #1e293b;
-      border: none;
-      border-radius: 10px;
-      padding: 12px 10px;
-      font-size: 15px;
-      font-weight: 700;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 6px;
-    }
-
-    .cam-status {
-      font-size: 13.5px;
-      font-weight: 600;
-      color: var(--green);
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-
-    /* ================= การ์ดเปรียบเทียบ QR vs OCR (ภาพกลาง) ================= */
-    .compare-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-      margin-bottom: 12px;
-    }
-
-    .info-card {
-      background: var(--card);
+      font-weight: bold;
+      padding: 4px 12px;
       border-radius: 12px;
-      padding: 12px;
-      border: 1px solid var(--border);
-      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
     }
-
-    .qr-card {
-      border-left: 4px solid var(--blue);
-    }
-
-    .ocr-card {
-      border-left: 4px solid var(--green);
-    }
-
-    .info-card-header {
-      font-size: 13.5px;
-      font-weight: 700;
-      margin-bottom: 8px;
-      display: flex;
-      align-items: center;
-      gap: 5px;
-    }
-
-    .qr-card .info-card-header { color: var(--blue); }
-    .ocr-card .info-card-header { color: var(--green); }
-
-    .info-line {
-      font-size: 14px;
-      margin-bottom: 6px;
-      line-height: 1.35;
-      word-break: break-word;
-    }
-
-    .drug-highlight {
-      color: #059669;
-      font-weight: 700;
-      font-size: 15px;
-      margin: 4px 0 8px 0;
-    }
-
-    .loc-pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      background: #e0f2fe;
-      color: #1d4ed8;
-      font-weight: 700;
+    .guide-hint {
+      background: rgba(15, 23, 42, 0.65);
+      color: #fff;
+      font-size: 12px;
       padding: 3px 10px;
-      border-radius: 8px;
-      font-size: 14px;
-    }
-
-    .qty-red {
-      color: var(--red);
-      font-weight: 700;
-      font-size: 16px;
-    }
-
-    .btn-clear-qr {
-      margin-top: 10px;
-      width: 100%;
-      background: #f0f9ff;
-      border: 1px solid #7dd3fc;
-      color: var(--blue-dark);
-      border-radius: 8px;
-      padding: 7px 6px;
-      font-size: 12.5px;
-      font-weight: 700;
-      cursor: pointer;
-    }
-
-    /* กล่องยืนยัน 2 ชั้นตรงกัน (สีเขียว) */
-    .match-box {
-      background: #ecfdf5;
-      border: 2px solid var(--green-border);
-      border-radius: 14px;
-      padding: 14px;
-      text-align: center;
-      margin-bottom: 14px;
-    }
-
-    .match-title {
-      color: #15803d;
-      font-size: 16px;
-      font-weight: 700;
-      margin-bottom: 6px;
-    }
-
-    .match-drug {
-      color: #14532d;
-      font-size: 15.5px;
-      font-weight: 700;
-      margin-bottom: 8px;
-    }
-
-    .match-loc {
-      font-size: 14.5px;
-      color: #1e293b;
-      margin-bottom: 12px;
-    }
-
-    .btn-goto-step2 {
-      width: 100%;
-      background: var(--purple);
-      color: #fff;
-      border: none;
-      border-radius: 10px;
-      padding: 13px;
-      font-size: 15.5px;
-      font-weight: 700;
-      cursor: pointer;
-      box-shadow: 0 4px 12px rgba(124, 58, 237, 0.3);
-    }
-
-    /* กล่องแจ้งเตือนไม่ตรงกัน (Near Miss) */
-    .mismatch-box {
-      background: #fef2f2;
-      border: 2px solid #ef4444;
-      border-radius: 14px;
-      padding: 14px;
-      text-align: center;
-      margin-bottom: 14px;
-    }
-
-    .mismatch-title {
-      color: #b91c1c;
-      font-size: 16px;
-      font-weight: 700;
-      margin-bottom: 6px;
-    }
-
-    /* ================= STEP 2: สแกนบาร์โค้ด (ภาพขวา) ================= */
-    .barcode-box {
-      position: relative;
-      width: 100%;
-      aspect-ratio: 1 / 1;
-      background: #090d16;
-      border-radius: 14px;
-      overflow: hidden;
-      margin-bottom: 12px;
-    }
-
-    .barcode-box video {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-    }
-
-    /* มุมเล็งสีขาว 4 มุมเหมือนภาพขวา */
-    .corner {
-      position: absolute;
-      width: 34px;
-      height: 34px;
-      border-color: #ffffff;
-      border-style: solid;
-      pointer-events: none;
-    }
-    .c-tl { top: 24px; left: 24px; border-width: 3px 0 0 3px; }
-    .c-tr { top: 24px; right: 24px; border-width: 3px 3px 0 0; }
-    .c-bl { bottom: 24px; left: 24px; border-width: 0 0 3px 3px; }
-    .c-br { bottom: 24px; right: 24px; border-width: 0 3px 3px 0; }
-
-    .btn-next-bag {
-      width: 100%;
-      background: #475569;
-      color: #fff;
-      border: none;
-      border-radius: 10px;
-      padding: 13px;
-      font-size: 15px;
-      font-weight: 700;
-      cursor: pointer;
-    }
-
-    .pass-banner {
-      background: #dcfce7;
-      border: 2px solid #16a34a;
-      color: #14532d;
       border-radius: 12px;
-      padding: 14px;
-      text-align: center;
-      margin-bottom: 12px;
-      font-weight: 700;
     }
 
-    .hidden { display: none !important; }
+    .btn-group { display: flex; gap: 8px; margin-top: 10px; }
+    button, .file-btn {
+      flex: 1; padding: 13px; font-size: 15px; font-weight: bold;
+      border: none; border-radius: 8px; cursor: pointer; text-align: center;
+    }
+    .btn-primary { background: #0284c7; color: white; width: 100%; }
+    .btn-primary:disabled { background: #7dd3fc; }
+    .btn-purple { background: #7c3aed; color: white; width: 100%; margin-top: 10px; }
+    .file-btn { background: #e2e8f0; color: #1e293b; }
+    .btn-reset { background: #475569; color: white; width: 100%; margin-top: 12px; }
+    .btn-mini-unlock {
+      background: #e0f2fe; color: #0369a1; border: 1px solid #7dd3fc;
+      padding: 2px 6px; font-size: 11px; border-radius: 4px; cursor: pointer;
+      margin-top: 6px; width: auto; flex: none;
+    }
+
+    .compare-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+      margin-top: 10px; display: none;
+    }
+    .source-box {
+      padding: 10px; border-radius: 8px; font-size: 13px;
+      background: #f8fafc; border: 1px solid #cbd5e1;
+    }
+    .source-box.qr { border-left: 4px solid #0284c7; }
+    .source-box.ocr { border-left: 4px solid #16a34a; }
+
+    .verdict-box {
+      margin-top: 10px; padding: 12px; border-radius: 10px;
+      text-align: center; display: none;
+    }
+    .verdict-pass { background: #dcfce7; border: 2px solid #16a34a; color: #14532d; }
+    .verdict-warn { background: #fef3c7; border: 2px solid #d97706; color: #78350f; }
+    .verdict-fail { background: #fee2e2; border: 2px solid #dc2626; color: #7f1d1d; }
+
+    #barcodeReader {
+      width: 100%;
+      min-height: 280px;
+      border-radius: 12px;
+      overflow: hidden;
+      background: #000;
+    }
+    .verify-result {
+      margin-top: 12px; padding: 16px; border-radius: 12px;
+      text-align: center; display: none;
+    }
+    .verify-pass { background: #dcfce7; border: 3px solid #16a34a; color: #14532d; }
+    .verify-fail { background: #fee2e2; border: 3px solid #dc2626; color: #7f1d1d; }
+    .verify-unknown { background: #fef3c7; border: 3px solid #d97706; color: #78350f; }
+
+    .log-badge {
+      display: inline-block;
+      margin-top: 8px;
+      padding: 3px 10px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: bold;
+      background: rgba(255, 255, 255, 0.85);
+      color: #991b1b;
+    }
+    .log-badge-pass {
+      display: inline-block;
+      margin-top: 8px;
+      padding: 3px 10px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: bold;
+      background: rgba(255, 255, 255, 0.9);
+      color: #15803d;
+    }
+    .loc-badge {
+      display: inline-block;
+      background: #dbeafe;
+      color: #1e40af;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-weight: bold;
+    }
   </style>
 </head>
 <body>
-  <div class="app-container">
 
-    <!-- ==================== 1. หน้าเข้าสู่ระบบ (LOGIN) ==================== -->
-    <div id="loginView" class="login-card">
-      <div class="login-header">
-        <h1>💊 PSU LASA Verification</h1>
-        <p>ระบบทวนสอบยาพ้องมองคล้าย 2 ขั้นตอน (QR/OCR & Barcode)</p>
-      </div>
-      <form id="loginForm">
-        <div class="form-group">
-          <label for="staffIdInput">รหัสผู้ปฏิบัติงาน (Staff ID)</label>
-          <input type="text" id="staffIdInput" inputmode="numeric" pattern="[0-9]*" oninput="this.value = this.value.replace(/[^0-9]/g, '')" placeholder="กรอกรหัสเจ้าหน้าที่" required autocomplete="off" />
-        </div>
-        <div class="form-group">
-          <label for="pinInput">รหัสผ่าน (PIN)</label>
-          <input type="password" id="pinInput" inputmode="numeric" pattern="[0-9]*" oninput="this.value = this.value.replace(/[^0-9]/g, '')" placeholder="กรอกรหัส PIN 6 หลัก" required />
-        </div>
-        <button type="submit" id="loginBtn" class="btn-primary">เข้าสู่ระบบ</button>
-        <div id="loginError" class="error-msg"></div>
-      </form>
+<div class="container">
+  <!-- ==================== หน้าเข้าสู่ระบบ (LOGIN) ==================== -->
+  <div id="loginView" class="card login-card">
+    <div style="text-align:center; margin-bottom:18px;">
+      <h2 style="font-size:21px; color:#0369a1;">💊 PSU LASA Verification</h2>
+      <p class="sub">เข้าสู่ระบบผู้ปฏิบัติงานเพื่อทวนสอบยา</p>
     </div>
-
-    <!-- ==================== 2. หน้าหลักแอปพลิเคชัน ==================== -->
-    <div id="mainView" class="hidden">
-      <!-- แถบสถานะผู้ใช้งาน -->
-      <div class="user-bar">
-        <div class="user-info">
-          <strong id="displayUserName">ผู้ใช้งาน</strong>
-          <span id="displayUserRole">ตำแหน่ง</span>
-        </div>
-        <div class="user-actions">
-          <span id="dbCountBadge" class="db-badge">กำลังโหลดยา...</span>
-          <button type="button" id="logoutBtn" class="btn-logout">ออก</button>
-        </div>
+    <form id="loginForm">
+      <div class="form-group">
+        <label for="staffIdInput">รหัสผู้ปฏิบัติงาน (Staff ID)</label>
+        <input type="text" id="staffIdInput" inputmode="numeric" pattern="[0-9]*"
+               oninput="this.value = this.value.replace(/[^0-9]/g, '')"
+               placeholder="กรอกรหัสตัวเลขเท่านั้น" required autocomplete="off">
       </div>
-
-      <!-- STEP 1: สแกนฉลากยา (เต็มกรอบกล้อง) -->
-      <div id="step1Section" class="step-card step1-border">
-        <h2 class="step-title">Step 1: สแกนฉลากยา (เต็มกรอบกล้อง)</h2>
-        <p class="step-subtitle">ส่องซองยาให้เห็นทั้งใบ ระบบจะล็อก QR Code อัตโนมัติแล้วอ่านชื่อยา</p>
-
-        <div class="camera-box">
-          <video id="videoStep1" autoplay playsinline muted></video>
-          <div class="dashed-guide">
-            <div id="qrBadgeTop" class="pill-top">🔎 กำลังมองหา QR Code อัตโนมัติ...</div>
-            <div class="pill-bottom">ถือให้นิ่งและหลบแสงสะท้อนบนซองพลาสติก</div>
-          </div>
-        </div>
-
-        <div class="btn-row">
-          <button type="button" id="captureOcrBtn" class="btn-capture">📸 ถ่ายภาพอ่านฉลาก</button>
-          <button type="button" id="uploadTriggerBtn" class="btn-upload">📁 เลือกรูปซอง</button>
-          <input type="file" id="imageUploadInput" accept="image/*" class="hidden" />
-        </div>
-
-        <div id="camStatusText" class="cam-status">✅ กล้องพร้อม! ส่องซองยาให้เต็มกรอบ</div>
+      <div class="form-group">
+        <label for="pinInput">รหัสผ่าน (PIN)</label>
+        <input type="password" id="pinInput" inputmode="numeric" pattern="[0-9]*"
+               oninput="this.value = this.value.replace(/[^0-9]/g, '')"
+               placeholder="กรอกรหัส PIN ตัวเลขเท่านั้น" required>
       </div>
-
-      <!-- กล่องเปรียบเทียบ QR Code vs OCR (เหมือนภาพกลาง) -->
-      <div id="compareSection" class="hidden">
-        <div class="compare-grid">
-          <!-- ซ้าย: จาก QR Code -->
-          <div class="info-card qr-card">
-            <div>
-              <div class="info-card-header">📲 จาก QR Code</div>
-              <div class="info-line">🔓 ล็อกรหัสยา: <strong id="qrCodeVal">-</strong></div>
-              <div id="qrDrugNameVal" class="drug-highlight">-</div>
-              <div class="info-line">ตำแหน่ง: <span class="loc-pill">📍 <span id="qrLocVal">-</span></span></div>
-            </div>
-            <button type="button" id="clearQrBtn" class="btn-clear-qr">🔓 ล้างค่า QR เพื่อสแกนใหม่</button>
-          </div>
-
-          <!-- ขวา: จาก OCR หน้าซอง -->
-          <div class="info-card ocr-card">
-            <div>
-              <div class="info-card-header">👁️ จาก OCR หน้าซอง</div>
-              <div class="info-line">บรรทัดยา: <span id="ocrDrugLineVal">กำลังอ่าน...</span></div>
-              <div class="info-line" id="ocrBracketVal"></div>
-              <div class="info-line">จำนวน: <span id="ocrQtyVal" class="qty-red">-</span></div>
-            </div>
-          </div>
-        </div>
-
-        <!-- กล่องยืนยัน 2 ชั้นตรงกัน (สีเขียว) -->
-        <div id="matchConfirmBox" class="match-box hidden">
-          <div class="match-title">✅ ยืนยัน 2 ชั้นตรงกัน! (รหัส <span id="matchCodeText"></span>)</div>
-          <div class="match-drug">จัดยา: <span id="matchDrugText"></span> จำนวน <span id="matchQtyText"></span></div>
-          <div class="match-loc">ตำแหน่งจัดเก็บยา: <span class="loc-pill">📍 <span id="matchLocText"></span></span></div>
-          <button type="button" id="goToStep2Btn" class="btn-goto-step2">➡️ ไป Step 2: สแกนบาร์โค้ดกล่องยาบนชั้น</button>
-        </div>
-
-        <!-- กล่องแจ้งเตือนไม่ตรงกัน (Near Miss Step 1) -->
-        <div id="mismatchAlertBox" class="mismatch-box hidden">
-          <div class="mismatch-title">⚠️ พบความคลาดเคลื่อน (Near Miss)!</div>
-          <div id="mismatchDetailText" style="font-size:14px; color:#7f1d1d; margin-bottom:10px;"></div>
-          <button type="button" id="retryStep1Btn" class="btn-capture" style="width:100%; background:#dc2626;">🔄 สแกนซองยาใหม่อีกครั้ง</button>
-        </div>
-      </div>
-
-      <!-- STEP 2: ยิงบาร์โค้ดกล่องยาบนชั้น (เหมือนภาพขวา) -->
-      <div id="step2Section" class="step-card step2-border hidden">
-        <h2 class="step-title">Step 2: ยิงบาร์โค้ดกล่องยาบนชั้น</h2>
-        <p class="step-subtitle">ส่องกล้องไปที่บาร์โค้ดข้างกล่องยาหรือหน้าตะกร้าเพื่อยืนยันก่อนหยิบ</p>
-
-        <div id="step2TargetInfo" style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:10px; padding:10px; margin-bottom:10px; font-size:14px;">
-          กำลังตรวจสอบ: <strong id="step2DrugName">-</strong> (พิกัด <span class="loc-pill">📍 <span id="step2Loc">-</span></span>)
-        </div>
-
-        <div id="barcodeResultBanner" class="hidden"></div>
-
-        <div class="barcode-box">
-          <video id="videoStep2" autoplay playsinline muted></video>
-          <div class="corner c-tl"></div>
-          <div class="corner c-tr"></div>
-          <div class="corner c-bl"></div>
-          <div class="corner c-br"></div>
-        </div>
-
-        <button type="button" id="nextBagBtn" class="btn-next-bag">🔄 สแกนซองยาถัดไป</button>
-      </div>
-
-    </div>
+      <button type="submit" id="loginBtn" class="btn-primary">เข้าสู่ระบบ</button>
+      <div id="loginError" class="login-error"></div>
+    </form>
   </div>
 
-  <canvas id="hiddenCanvas" class="hidden"></canvas>
+  <!-- ==================== หน้าหลักแอปพลิเคชัน (หลัง Login) ==================== -->
+  <div id="appView" style="display:none;">
+    <!-- แถบแสดงชื่อผู้ปฏิบัติงาน -->
+    <div class="card user-card">
+      <div>
+        <strong id="displayUserName" style="font-size:14px; color:#0f172a;">-</strong>
+        <div id="displayUserRole" style="font-size:12px; color:#64748b;">-</div>
+      </div>
+      <button type="button" class="btn-logout" onclick="logoutUser()">ออกจากระบบ</button>
+    </div>
 
-  <script>
-    // =========================================================================
-    // 1. วางลิงก์ Google Apps Script Web App (/exec) ของคุณที่นี่
-    // =========================================================================
-    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxhZmS1A54ftdDAXkwhAYTI2JiDbG_win1NBrOM2iegzai5Pp1j_EQbVYu4l3IrAW8/exec";
+    <!-- ==================== ส่วนแสดงสถานะฐานข้อมูล ==================== -->
+    <div class="card db-card">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <strong style="font-size:14px; color:#065f46;">📊 ฐานข้อมูลยา (Google Sheets)</strong>
+        <span id="dbCountBadge" style="font-size:12px; background:#d1fae5; color:#065f46; padding:2px 8px; border-radius:10px; font-weight:bold;">0 รายการ</span>
+      </div>
+      <div id="dbStatus" style="font-size:12px; color:#64748b; margin-top:6px;">
+        ⏳ กำลังโหลดฐานข้อมูล...
+      </div>
+    </div>
 
-    // ตัวแปรสถานะระบบ
-    let currentUser = null;
-    let currentDept = "-";
-    let drugDatabase = [];
-    let step1Stream = null;
-    let qrLoopId = null;
-    let zxingReader = null;
+    <!-- ==================== STEP 1: FULL-FRAME QR LOCK + OCR ==================== -->
+    <div class="card" id="step1Card">
+      <h2>Step 1: สแกนฉลากยา (เต็มกรอบกล้อง)</h2>
+      <p class="sub">ส่องซองยาให้เห็นทั้งใบ ระบบจะล็อก QR Code อัตโนมัติแล้วอ่านชื่อยา</p>
 
-    // ข้อมูลซองยาที่กำลังตรวจสอบปัจจุบัน
-    let currentScan = {
-      hn: "-",
-      drug: null,
-      ocrDrugText: "-",
-      qty: "-",
-      step1Matched: false,
-      step2Completed: false
+      <div class="camera-wrapper" id="cameraWrapper">
+        <video id="video" autoplay playsinline></video>
+        <div class="full-frame-guide">
+          <span class="live-badge" id="liveBadge">🔎 กำลังมองหา QR Code อัตโนมัติ...</span>
+          <span class="guide-hint">ถือให้นิ่งและหลบแสงสะท้อนบนซองพลาสติก</span>
+        </div>
+      </div>
+
+      <div class="btn-group">
+        <button id="scanBtn" class="btn-primary">📸 ถ่ายภาพอ่านฉลาก</button>
+        <label class="file-btn">
+          📁 เลือกรูปซอง
+          <input type="file" id="uploadInput" accept="image/*" hidden>
+        </label>
+      </div>
+
+      <div id="status" style="margin-top:8px; font-size:13px; font-weight:bold; color:#d97706;">
+        กำลังเปิดกล้อง...
+      </div>
+
+      <div class="compare-grid" id="compareGrid">
+        <div class="source-box qr">
+          <div style="color:#0284c7; font-weight:bold;">📲 จาก QR Code</div>
+          <div id="qrResultText" style="margin-top:4px;">-</div>
+          <button id="unlockQrBtn" class="btn-mini-unlock" style="display:none;" onclick="unlockQr()">🔓 ล้างค่า QR เพื่อสแกนใหม่</button>
+        </div>
+        <div class="source-box ocr">
+          <div style="color:#16a34a; font-weight:bold;">👁️ จาก OCR หน้าซอง</div>
+          <div id="ocrResultText" style="margin-top:4px;">-</div>
+        </div>
+      </div>
+
+      <div id="verdictBox" class="verdict-box">
+        <div id="verdictMsg"></div>
+        <button id="goStep2Btn" class="btn-purple" style="display:none;">
+          ➡️ ไป Step 2: สแกนบาร์โค้ดกล่องยาบนชั้น
+        </button>
+      </div>
+    </div>
+
+    <!-- ==================== STEP 2: BARCODE VERIFICATION ==================== -->
+    <div class="card step2 disabled" id="step2Card">
+      <h2>Step 2: ยิงบาร์โค้ดกล่องยาบนชั้น</h2>
+      <p class="sub">ส่องกล้องไปที่บาร์โค้ดข้างกล่องยาหรือหน้าตะกร้าเพื่อยืนยันก่อนหยิบ</p>
+
+      <div id="barcodeReader"></div>
+
+      <div id="verifyResult" class="verify-result">
+        <div id="verifyIcon" style="font-size: 38px;"></div>
+        <div id="verifyTitle" style="font-size: 19px; font-weight: bold; margin: 4px 0;"></div>
+        <div id="verifyDetail" style="font-size: 14px;"></div>
+      </div>
+
+      <button class="btn-reset" onclick="resetAll()">🔄 สแกนซองยาถัดไป</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ⚠️ วางลิงก์ Google Apps Script (/exec) ของคุณที่นี่ (ดึงข้อมูลยา, Login และบันทึกผลผ่านลิงก์นี้ทั้งหมด)
+  const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxhZmS1A54ftdDAXkwhAYTI2JiDbG_win1NBrOM2iegzai5Pp1j_EQbVYu4l3IrAW8/exec";
+
+  let DRUG_DB = {
+    "1564": {
+      code: "1564",
+      name: "Nebule Salbutamol 2.5mg",
+      ocrKeywords: ["salbutamol", "nebule", "2.5mg", "2.5 mg"],
+      barcodes: ["BOX-1564"],
+      location: ""
+    }
+  };
+
+  let currentUser = null; // เก็บข้อมูลผู้ใช้งานที่ Login (staffId, name, role)
+  let activeOrder = null;
+  let step1Stream = null;
+  let html5QrCode = null;
+  let autoScanTimer = null;
+  let isProcessing = false;
+  let lockedQrData = '';
+  let loggedScanKeys = new Set();
+
+  const video = document.getElementById('video');
+  const statusEl = document.getElementById('status');
+  const liveBadge = document.getElementById('liveBadge');
+
+  // =========================================================================
+  // 0. ระบบเข้าสู่ระบบ (Login ตรวจสอบกับแท็บ Users: staffid / name / role / pin)
+  // =========================================================================
+  document.getElementById('loginForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const staffId = document.getElementById('staffIdInput').value.trim();
+    const pin = document.getElementById('pinInput').value.trim();
+    const loginBtn = document.getElementById('loginBtn');
+    const loginError = document.getElementById('loginError');
+
+    loginError.style.display = 'none';
+
+    if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL === "วางลิงก์_Apps_Script_Web_App_ของคุณที่นี่") {
+      loginError.textContent = '⚠️ กรุณาใส่ลิงก์ APPS_SCRIPT_URL (/exec) ในโค้ดก่อนเข้าสู่ระบบ';
+      loginError.style.display = 'block';
+      return;
+    }
+
+    loginBtn.disabled = true;
+    loginBtn.textContent = '⏳ กำลังตรวจสอบรหัสผู้ปฏิบัติงาน...';
+
+    try {
+      const url = `${APPS_SCRIPT_URL}?action=login&staffId=${encodeURIComponent(staffId)}&pin=${encodeURIComponent(pin)}`;
+      const res = await fetch(url);
+      const data = await res.json();
+
+      if (data.status === 'success' && data.user) {
+        currentUser = {
+          staffId: data.user.staffId || staffId,
+          name: data.user.name || '-',
+          role: data.user.role || '-'
+        };
+
+        document.getElementById('displayUserName').textContent = `👤 ${currentUser.name} (${currentUser.staffId})`;
+        document.getElementById('displayUserRole').textContent = `ตำแหน่ง: ${currentUser.role}`;
+
+        document.getElementById('loginView').style.display = 'none';
+        document.getElementById('appView').style.display = 'block';
+
+        loadDrugsFromAppsScript();
+        startStep1Camera();
+      } else {
+        loginError.textContent = data.message || '❌ รหัสผู้ปฏิบัติงาน (staffid) หรือ PIN ไม่ถูกต้อง';
+        loginError.style.display = 'block';
+      }
+    } catch (err) {
+      loginError.textContent = '❌ ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ Login ได้ กรุณาตรวจสอบ APPS_SCRIPT_URL';
+      loginError.style.display = 'block';
+    } finally {
+      loginBtn.disabled = false;
+      loginBtn.textContent = 'เข้าสู่ระบบ';
+    }
+  });
+
+  async function logoutUser() {
+    if (autoScanTimer) clearInterval(autoScanTimer);
+    if (step1Stream) step1Stream.getTracks().forEach(t => t.stop());
+    if (html5QrCode && html5QrCode.isScanning) {
+      try { await html5QrCode.stop(); } catch (e) {}
+    }
+    currentUser = null;
+    activeOrder = null;
+    lockedQrData = '';
+    loggedScanKeys.clear();
+    document.getElementById('pinInput').value = '';
+    document.getElementById('appView').style.display = 'none';
+    document.getElementById('loginView').style.display = 'block';
+  }
+
+  // =========================================================================
+  // 1. ระบบดึงข้อมูลรายการยาจาก Apps Script (?action=getDrugs)
+  // =========================================================================
+  async function loadDrugsFromAppsScript() {
+    const dbStatus = document.getElementById('dbStatus');
+
+    if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL === "วางลิงก์_Apps_Script_Web_App_ของคุณที่นี่") {
+      dbStatus.textContent = '⚠️ ยังไม่ได้ใส่ลิงก์ APPS_SCRIPT_URL ในโค้ด';
+      dbStatus.style.color = '#d97706';
+      updateDbBadge();
+      return;
+    }
+
+    dbStatus.textContent = '⏳ กำลังซิงค์ข้อมูลจาก Google Sheets...';
+    dbStatus.style.color = '#0284c7';
+
+    try {
+      const res = await fetch(`${APPS_SCRIPT_URL}?action=getDrugs&t=${Date.now()}`);
+      const data = await res.json();
+      if (data.status === 'success' && Array.isArray(data.drugs) && data.drugs.length > 0) {
+        const newDB = {};
+        data.drugs.forEach(item => {
+          if (item.code && item.name) {
+            newDB[String(item.code).trim()] = {
+              code: String(item.code).trim(),
+              name: String(item.name).trim(),
+              ocrKeywords: Array.isArray(item.ocrKeywords) && item.ocrKeywords.length > 0
+                ? item.ocrKeywords.map(k => String(k).trim().toLowerCase()).filter(Boolean)
+                : [String(item.name).trim().toLowerCase()],
+              barcodes: Array.isArray(item.barcodes)
+                ? item.barcodes.map(b => String(b).trim()).filter(Boolean)
+                : [],
+              location: item.location ? String(item.location).trim() : ''
+            };
+          }
+        });
+        DRUG_DB = newDB;
+        const now = new Date();
+        const dateStr = now.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' });
+        const timeStr = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        dbStatus.textContent = `✅ อัปเดตล่าสุดเมื่อ ${dateStr} เวลา ${timeStr}`;
+        dbStatus.style.color = '#059669';
+        updateDbBadge();
+      } else {
+        dbStatus.textContent = '⚠️ ไม่พบรายการยาในแท็บ Drugs';
+        dbStatus.style.color = '#d97706';
+      }
+    } catch (e) {
+      dbStatus.textContent = '❌ ดึงข้อมูลรายการยาไม่สำเร็จ';
+      dbStatus.style.color = '#dc2626';
+    }
+  }
+
+  function updateDbBadge() {
+    document.getElementById('dbCountBadge').textContent = `${Object.keys(DRUG_DB).length} รายการ`;
+  }
+
+  // =========================================================================
+  // 2. ระบบบันทึกทุกการสแกน (ทั้งถูก PASS และผิด NEAR_MISS) ลง Google Sheets
+  // =========================================================================
+  function parseQrDetails(rawQr) {
+    if (!rawQr) return { hn: '-', dept: '-', code: '' };
+    if (rawQr.includes('|')) {
+      const parts = rawQr.split('|').map(s => s.trim());
+      return {
+        hn: parts[0] || '-',
+        dept: parts.length >= 4 ? `${parts[3]} (ช่อง ${parts[2] || '-'})` : '-',
+        code: parts[parts.length - 1] || ''
+      };
+    }
+    return { hn: '-', dept: '-', code: rawQr.trim() };
+  }
+
+  function logVerificationToSheet(statusType, stepName, drugCode, expectedDrug, actualDrug, location, note) {
+    if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL === "วางลิงก์_Apps_Script_Web_App_ของคุณที่นี่") {
+      return false;
+    }
+
+    const qrInfo = parseQrDetails(lockedQrData);
+    const dedupeKey = `${statusType}|${stepName}|${qrInfo.hn}|${drugCode}|${actualDrug}`;
+
+    if (loggedScanKeys.has(dedupeKey)) return true;
+    loggedScanKeys.add(dedupeKey);
+
+    const payload = {
+      status: statusType, // "PASS" หรือ "NEAR_MISS"
+      step: stepName,
+      staffId: currentUser ? currentUser.staffId : '-',
+      staffName: currentUser ? `${currentUser.name} (${currentUser.role})` : '-',
+      hn: qrInfo.hn,
+      dept: qrInfo.dept,
+      drugCode: drugCode || qrInfo.code || '-',
+      expectedDrug: expectedDrug || '-',
+      actualDrug: actualDrug || '-',
+      location: location || '-',
+      note: note || '-'
     };
 
-    // ระบบเสียงพูดภาษาไทย (TTS)
-    function speakThai(text) {
-      if ('speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
-        const utter = new SpeechSynthesisUtterance(text);
-        utter.lang = 'th-TH';
-        utter.rate = 1.05;
-        window.speechSynthesis.speak(utter);
-      }
+    fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload)
+    }).catch(err => console.warn('Log verification failed:', err));
+
+    return true;
+  }
+
+  function playSound(type) {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    const ctx = new AudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+
+    if (type === 'pass') {
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+      osc.frequency.setValueAtTime(880, ctx.currentTime + 0.12);
+      gain.gain.setValueAtTime(0.25, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.35);
+      osc.start(); osc.stop(ctx.currentTime + 0.35);
+    } else {
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(329.63, ctx.currentTime);
+      osc.frequency.setValueAtTime(261.63, ctx.currentTime + 0.15);
+      gain.gain.setValueAtTime(0.2, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+      osc.start(); osc.stop(ctx.currentTime + 0.4);
     }
+  }
 
-    // ================= LOGIN & LOGOUT =================
-    document.getElementById('loginForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const staffId = document.getElementById('staffIdInput').value.trim();
-      const pin = document.getElementById('pinInput').value.trim();
-      const dept = "-";
-      const btn = document.getElementById('loginBtn');
-      const errBox = document.getElementById('loginError');
-
-      errBox.style.display = 'none';
-      btn.disabled = true;
-      btn.textContent = 'กำลังตรวจสอบสิทธิ์...';
-
-      try {
-        const url = `${APPS_SCRIPT_URL}?action=login&staffId=${encodeURIComponent(staffId)}&pin=${encodeURIComponent(pin)}`;
-        const res = await fetch(url);
-        const data = await res.json();
-
-        if (data.status === 'success') {
-          currentUser = data.user;
-          currentDept = dept;
-          document.getElementById('displayUserName').textContent = currentUser.name;
-          document.getElementById('displayUserRole').textContent = `${currentUser.role} (${currentUser.staffId})`;
-
-          document.getElementById('loginView').classList.add('hidden');
-          document.getElementById('mainView').classList.remove('hidden');
-
-          await loadDrugDatabase();
-          await startStep1Camera();
-        } else {
-          errBox.textContent = data.message || 'รหัสพนักงานหรือ PIN ไม่ถูกต้อง';
-          errBox.style.display = 'block';
+  // ================= STEP 1: กล้อง + ล็อกค่า QR Code =================
+  async function startStep1Camera() {
+    if (!currentUser) return;
+    isProcessing = false;
+    try {
+      step1Stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: 'environment',
+          width: { ideal: 1920 },
+          height: { ideal: 1440 }
         }
-      } catch (err) {
-        errBox.textContent = 'ไม่สามารถเชื่อมต่อฐานข้อมูลได้ กรุณาตรวจสอบ APPS_SCRIPT_URL';
-        errBox.style.display = 'block';
-      } finally {
-        btn.disabled = false;
-        btn.textContent = 'เข้าสู่ระบบ';
+      });
+      video.srcObject = step1Stream;
+      statusEl.textContent = '✅ กล้องพร้อม! ส่องซองยาให้เต็มกรอบ';
+      statusEl.style.color = '#059669';
+
+      if (!lockedQrData) {
+        liveBadge.textContent = '🔎 กำลังมองหา QR Code อัตโนมัติ...';
+        liveBadge.style.background = 'rgba(2, 132, 199, 0.9)';
+        startLiveQrLoop();
       }
-    });
+    } catch (err) {
+      statusEl.textContent = '⚠️ ไม่พบกล้อง (กด "เลือกรูปซอง" เพื่อทดสอบได้)';
+      statusEl.style.color = '#dc2626';
+    }
+  }
 
-    document.getElementById('logoutBtn').addEventListener('click', () => {
-      stopAllCameras();
-      currentUser = null;
-      document.getElementById('mainView').classList.add('hidden');
-      document.getElementById('loginView').classList.remove('hidden');
-      document.getElementById('pinInput').value = '';
-    });
+  function captureHighResFrame() {
+    const wrap = document.getElementById('cameraWrapper');
+    const vw = video.videoWidth, vh = video.videoHeight;
+    const cw = wrap.clientWidth, ch = wrap.clientHeight;
+    const scale = Math.max(cw / vw, ch / vh);
+    const cropW = cw / scale;
+    const cropH = ch / scale;
+    const cropX = (vw - cropW) / 2;
+    const cropY = (vh - cropH) / 2;
 
-    // ================= โหลดฐานข้อมูลยา LASA =================
-    async function loadDrugDatabase() {
-      const badge = document.getElementById('dbCountBadge');
+    const fullCanvas = document.createElement('canvas');
+    fullCanvas.width = Math.round(cropW);
+    fullCanvas.height = Math.round(cropH);
+    fullCanvas.getContext('2d').drawImage(video, cropX, cropY, cropW, cropH, 0, 0, fullCanvas.width, fullCanvas.height);
+    return fullCanvas;
+  }
+
+  async function detectQrFromCanvas(fullCanvas) {
+    if ('BarcodeDetector' in window) {
       try {
-        const res = await fetch(`${APPS_SCRIPT_URL}?action=getDrugs`);
-        const data = await res.json();
-        if (data.status === 'success') {
-          drugDatabase = data.drugs || [];
-          badge.textContent = `ฐานข้อมูลยา LASA: ${drugDatabase.length} รายการ`;
-        } else {
-          badge.textContent = 'โหลดรายการยาไม่สำเร็จ';
+        const detector = new BarcodeDetector({ formats: ['qr_code'] });
+        const codes = await detector.detect(fullCanvas);
+        if (codes.length > 0 && codes[0].rawValue) {
+          return codes[0].rawValue.trim();
         }
-      } catch (e) {
-        badge.textContent = 'เชื่อมต่อฐานข้อมูลล้มเหลว';
+      } catch (e) {}
+    }
+
+    const ctx = fullCanvas.getContext('2d', { willReadFrequently: true });
+    const w = fullCanvas.width;
+    const h = fullCanvas.height;
+
+    const fullImg = ctx.getImageData(0, 0, w, h);
+    const qrFull = jsQR(fullImg.data, w, h, { inversionAttempts: "dontInvert" });
+    if (qrFull && qrFull.data) return qrFull.data.trim();
+
+    const rx = Math.floor(w * 0.45);
+    const rw = w - rx;
+    const rh = Math.floor(h * 0.65);
+    if (rw > 50 && rh > 50) {
+      const rightTopImg = ctx.getImageData(rx, 0, rw, rh);
+      const qrCorner = jsQR(rightTopImg.data, rw, rh, { inversionAttempts: "dontInvert" });
+      if (qrCorner && qrCorner.data) return qrCorner.data.trim();
+    }
+
+    return '';
+  }
+
+  function renderLockedQrUI() {
+    if (!lockedQrData) return;
+    const code = parseQrDetails(lockedQrData).code;
+    const drug = DRUG_DB[code] || null;
+    const locHtml = (drug && drug.location)
+      ? `<br>ตำแหน่ง: <span class="loc-badge">📍 ${drug.location}</span>`
+      : '';
+
+    liveBadge.textContent = `🔒 ล็อก QR สำเร็จ! (รหัสยา: ${code})`;
+    liveBadge.style.background = 'rgba(22, 163, 74, 0.95)';
+    document.getElementById('scanBtn').textContent = '📸 ถ่ายภาพอ่านชื่อยา (OCR) ซ้ำ';
+
+    document.getElementById('compareGrid').style.display = 'grid';
+    document.getElementById('unlockQrBtn').style.display = 'inline-block';
+    document.getElementById('qrResultText').innerHTML =
+      `🔒 ล็อกรหัสยา: <b>${code}</b><br>` +
+      `${drug ? `<span style="color:#059669; font-weight:bold;">${drug.name}</span>${locHtml}` : '<span style="color:#d97706;">(ไม่มีรหัสนี้ใน Google Sheets)</span>'}`;
+  }
+
+  function unlockQr() {
+    lockedQrData = '';
+    activeOrder = null;
+    document.getElementById('unlockQrBtn').style.display = 'none';
+    document.getElementById('qrResultText').innerHTML = '-';
+    document.getElementById('verdictBox').style.display = 'none';
+    document.getElementById('scanBtn').textContent = '📸 ถ่ายภาพอ่านฉลาก';
+    liveBadge.textContent = '🔎 กำลังมองหา QR Code อัตโนมัติ...';
+    liveBadge.style.background = 'rgba(2, 132, 199, 0.9)';
+    startLiveQrLoop();
+  }
+
+  function startLiveQrLoop() {
+    if (autoScanTimer) clearInterval(autoScanTimer);
+    autoScanTimer = setInterval(async () => {
+      if (!currentUser || lockedQrData || isProcessing || !video.videoWidth || video.paused) return;
+
+      const frameCanvas = captureHighResFrame();
+      const foundQr = await detectQrFromCanvas(frameCanvas);
+
+      if (foundQr) {
+        lockedQrData = foundQr;
+        clearInterval(autoScanTimer);
+        renderLockedQrUI();
+        processFullFrame(frameCanvas);
+      }
+    }, 350);
+  }
+
+  async function processFullFrame(fullCanvas) {
+    if (isProcessing) return;
+    isProcessing = true;
+    document.getElementById('scanBtn').disabled = true;
+
+    statusEl.textContent = '⏳ กำลังอ่านตัวอักษรหน้าซอง (OCR) เพื่อเทียบกับ QR...';
+    statusEl.style.color = '#0284c7';
+
+    if (!lockedQrData) {
+      const found = await detectQrFromCanvas(fullCanvas);
+      if (found) {
+        lockedQrData = found;
+        if (autoScanTimer) clearInterval(autoScanTimer);
       }
     }
 
-    // ================= STEP 1: กล้องสแกน QR + OCR =================
-    async function startStep1Camera() {
-      stopAllCameras();
-      const video = document.getElementById('videoStep1');
-      const statusText = document.getElementById('camStatusText');
-      try {
-        step1Stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 960 } },
-          audio: false
-        });
-        video.srcObject = step1Stream;
-        await video.play();
-        statusText.textContent = '✅ กล้องพร้อม! ส่องซองยาให้เต็มกรอบ';
-        startQrAutoScan();
-      } catch (err) {
-        statusText.style.color = '#dc2626';
-        statusText.textContent = '⚠️ ไม่สามารถเปิดกล้องได้ กรุณาอนุญาตสิทธิ์กล้อง หรือใช้ปุ่มเลือกรูปซอง';
-      }
+    const extractedDrugCode = parseQrDetails(lockedQrData).code;
+
+    let rawOcr = '';
+    try {
+      const ocrCanvas = document.createElement('canvas');
+      const ocrW = Math.min(1280, fullCanvas.width);
+      const ocrH = Math.round(ocrW * (fullCanvas.height / fullCanvas.width));
+      ocrCanvas.width = ocrW;
+      ocrCanvas.height = ocrH;
+      ocrCanvas.getContext('2d').drawImage(fullCanvas, 0, 0, ocrW, ocrH);
+
+      const worker = await Tesseract.createWorker('eng');
+      const ret = await worker.recognize(ocrCanvas.toDataURL('image/png'));
+      await worker.terminate();
+      rawOcr = ret.data.text;
+    } catch (e) { rawOcr = ''; }
+
+    const lines = rawOcr.split('\n').map(l => l.trim()).filter(l => l.length > 2);
+    const fullLower = rawOcr.toLowerCase();
+
+    const drugFromQR = DRUG_DB[extractedDrugCode] || null;
+    const drugFromOCR = Object.values(DRUG_DB).find(d => d.ocrKeywords.some(k => fullLower.includes(k))) || null;
+
+    let matchedLine = '';
+    if (drugFromOCR) {
+      matchedLine = lines.find(line => drugFromOCR.ocrKeywords.some(k => line.toLowerCase().includes(k))) || '';
+    }
+    const qtyMatch = matchedLine.match(/[\[\(\{]\s*(\d+)\s*[\]\)\}]/) || matchedLine.match(/\s(\d{1,3})$/);
+    const qty = qtyMatch ? qtyMatch[1] : 'ไม่ระบุ';
+
+    // ดึงตำแหน่งจัดเก็บยาจากฐานข้อมูล (ตามรหัสยาใน QR Code)
+    const shelfLocation = (drugFromQR && drugFromQR.location) ? drugFromQR.location : '';
+    const locationBadgeHtml = shelfLocation
+      ? `<span class="loc-badge">📍 ${shelfLocation}</span>`
+      : '';
+
+    document.getElementById('compareGrid').style.display = 'grid';
+    if (lockedQrData) {
+      renderLockedQrUI();
+    } else {
+      document.getElementById('qrResultText').innerHTML =
+        '<span style="color:#dc2626;">ยังจับ QR ไม่ได้ (กำลังสแกนหาอัตโนมัติ...)</span>';
     }
 
-    function stopAllCameras() {
-      if (qrLoopId) {
-        cancelAnimationFrame(qrLoopId);
-        qrLoopId = null;
-      }
-      if (step1Stream) {
-        step1Stream.getTracks().forEach(t => t.stop());
-        step1Stream = null;
-      }
-      if (zxingReader) {
-        try { zxingReader.reset(); } catch (e) {}
-      }
+    document.getElementById('ocrResultText').innerHTML = matchedLine
+      ? `บรรทัดยา: <b>${matchedLine}</b><br>จำนวน: <b style="color:#dc2626;">${qty}</b>`
+      : (drugFromOCR
+          ? `พบคำว่า: <b>${drugFromOCR.name}</b>`
+          : `<span style="color:#dc2626;">อ่านชื่อยาไม่ติด (กดถ่ายซ้ำได้ QR ยังล็อกอยู่)</span>`);
+
+    const verdictBox = document.getElementById('verdictBox');
+    const verdictMsg = document.getElementById('verdictMsg');
+    const goBtn = document.getElementById('goStep2Btn');
+    verdictBox.style.display = 'block';
+    goBtn.style.display = 'none';
+
+    if (drugFromQR && drugFromOCR && drugFromQR.code === drugFromOCR.code) {
+      activeOrder = { ...drugFromQR, qty: qty, location: shelfLocation };
+      verdictBox.className = 'verdict-box verdict-pass';
+      verdictMsg.innerHTML =
+        `✅ <b>ยืนยัน 2 ชั้นตรงกัน!</b> (รหัส ${drugFromQR.code})<br>` +
+        `จัดยา: <b>${drugFromQR.name}</b> จำนวน <b>${qty}</b>` +
+        (locationBadgeHtml ? `<div style="margin-top:6px; font-size:15px;">ตำแหน่งจัดเก็บยา: ${locationBadgeHtml}</div>` : '');
+      goBtn.style.display = 'block';
+    } else if (drugFromQR && !drugFromOCR) {
+      activeOrder = { ...drugFromQR, qty: qty, location: shelfLocation };
+      verdictBox.className = 'verdict-box verdict-warn';
+      verdictMsg.innerHTML =
+        `⚠️ <b>ล็อก QR สำเร็จ:</b> รหัส <b>${drugFromQR.code}</b> (${drugFromQR.name})` +
+        (locationBadgeHtml ? `<div style="margin-top:4px;">ตำแหน่งจัดเก็บยา: ${locationBadgeHtml}</div>` : '') +
+        `<small style="display:block; margin-top:4px;">หน้าซอง OCR ยังอ่านชื่อยาไม่ชัด สามารถกดปุ่มสีฟ้าถ่ายซ้ำ หรือกดไป Step 2 ได้เลย</small>`;
+      goBtn.style.display = 'block';
+    } else if (drugFromQR && drugFromOCR && drugFromQR.code !== drugFromOCR.code) {
+      playSound('fail');
+      const isLogged = logVerificationToSheet(
+        'NEAR_MISS',
+        'Step 1: ฉลากขัดแย้ง (QR vs OCR)',
+        drugFromQR.code,
+        `${drugFromQR.code} - ${drugFromQR.name}`,
+        `${drugFromOCR.code} - ${drugFromOCR.name}`,
+        shelfLocation || '-',
+        `OCR: ${matchedLine || drugFromOCR.name}`
+      );
+      verdictBox.className = 'verdict-box verdict-fail';
+      verdictMsg.innerHTML = `🚨 <b>ข้อมูลขัดแย้งกัน!</b><br>QR คือ <b>${drugFromQR.name}</b> แต่หน้าซองคือ <b>${drugFromOCR.name}</b>` +
+        (isLogged ? `<br><span class="log-badge">📝 บันทึกสถิติ Near-Miss ลงชีตแล้ว</span>` : '');
+    } else if (lockedQrData && !drugFromQR) {
+      verdictBox.className = 'verdict-box verdict-fail';
+      verdictMsg.innerHTML = `❌ ล็อกรหัสยา <b>${extractedDrugCode}</b> ได้แล้ว แต่ยังไม่พบใน Google Sheets`;
+    } else {
+      verdictBox.className = 'verdict-box verdict-fail';
+      verdictMsg.innerHTML = `❌ ยังอ่าน QR Code ไม่ติด กรุณาส่องไปที่มุมขวาบนของซองยา`;
+      isProcessing = false;
+      startLiveQrLoop();
     }
 
-    // วนลูปตรวจจับ QR Code อัตโนมัติ
-    function startQrAutoScan() {
-      const video = document.getElementById('videoStep1');
-      const canvas = document.getElementById('hiddenCanvas');
-      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    statusEl.textContent = '✅ เสร็จสิ้น';
+    statusEl.style.color = '#059669';
+    document.getElementById('scanBtn').disabled = false;
+    isProcessing = false;
+  }
 
-      function tick() {
-        if (!step1Stream || currentScan.drug) return;
-        if (video.readyState === video.HAVE_ENOUGH_DATA) {
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
+  document.getElementById('scanBtn').addEventListener('click', () => {
+    if (!video.videoWidth) return;
+    processFullFrame(captureHighResFrame());
+  });
 
-          if (code && code.data) {
-            handleQrDetected(code.data, canvas);
-            return;
-          }
-        }
-        qrLoopId = requestAnimationFrame(tick);
-      }
-      qrLoopId = requestAnimationFrame(tick);
-    }
-
-    // เมื่อพบ QR Code บนซองยา
-    async function handleQrDetected(rawQr, sourceCanvas) {
-      // แยกรหัสยา และ HN (รองรับรูปแบบ เช่น "1564" หรือ "HN12345|1564")
-      let drugCode = rawQr.trim();
-      let hn = "-";
-      if (rawQr.includes("|")) {
-        const parts = rawQr.split("|");
-        hn = parts[0].trim();
-        drugCode = parts[1].trim();
-      }
-
-      const foundDrug = drugDatabase.find(d => d.code === drugCode);
-      if (!foundDrug) {
-        document.getElementById('qrBadgeTop').textContent = `⚠️ พบรหัส ${drugCode} (ไม่อยู่ในรายการ LASA)`;
-        qrLoopId = requestAnimationFrame(() => startQrAutoScan());
-        return;
-      }
-
-      currentScan.hn = hn;
-      currentScan.drug = foundDrug;
-
-      // อัปเดต UI ด้านบนและการ์ดซ้าย (QR Code)
-      document.getElementById('qrBadgeTop').textContent = `🔒 ล็อกรหัสยา ${foundDrug.code} สำเร็จ!`;
-      document.getElementById('qrCodeVal').textContent = foundDrug.code;
-      document.getElementById('qrDrugNameVal').textContent = foundDrug.name;
-      document.getElementById('qrLocVal').textContent = foundDrug.location;
-      document.getElementById('compareSection').classList.remove('hidden');
-
-      speakThai(`ล็อกรหัสยา ${foundDrug.code} ตำแหน่ง ${foundDrug.location}`);
-
-      // รัน OCR อ่านชื่อยาและจำนวนจากภาพซองยาทันที
-      await runOcrOnCanvas(sourceCanvas);
-    }
-
-    // ปุ่มถ่ายภาพอ่านฉลากด้วยตนเอง
-    document.getElementById('captureOcrBtn').addEventListener('click', async () => {
-      const video = document.getElementById('videoStep1');
-      const canvas = document.getElementById('hiddenCanvas');
-      if (video.readyState === video.HAVE_ENOUGH_DATA) {
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
-        await runOcrOnCanvas(canvas);
-      }
-    });
-
-    // ปุ่มเลือกรูปซองจากเครื่อง
-    document.getElementById('uploadTriggerBtn').addEventListener('click', () => {
-      document.getElementById('imageUploadInput').click();
-    });
-
-    document.getElementById('imageUploadInput').addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
+  document.getElementById('uploadInput').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    lockedQrData = '';
+    if (autoScanTimer) clearInterval(autoScanTimer);
+    const reader = new FileReader();
+    reader.onload = (ev) => {
       const img = new Image();
-      img.onload = async () => {
-        const canvas = document.getElementById('hiddenCanvas');
-        canvas.width = img.width;
-        canvas.height = img.height;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0);
+      img.onload = () => {
+        const c = document.createElement('canvas');
+        c.width = img.width;
+        c.height = img.height;
+        c.getContext('2d').drawImage(img, 0, 0);
+        processFullFrame(c);
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
 
-        // เช็ก QR ในรูปที่อัปโหลดก่อน
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const code = jsQR(imageData.data, imageData.width, imageData.height);
-        if (code && code.data && !currentScan.drug) {
-          await handleQrDetected(code.data, canvas);
-        } else {
-          await runOcrOnCanvas(canvas);
+  // ================= STEP 2: ยิงบาร์โค้ดกล่องยาแบบเต็มกรอบ =================
+  document.getElementById('goStep2Btn').addEventListener('click', async () => {
+    if (autoScanTimer) clearInterval(autoScanTimer);
+    if (step1Stream) step1Stream.getTracks().forEach(t => t.stop());
+
+    const step2Card = document.getElementById('step2Card');
+    step2Card.classList.remove('disabled');
+    step2Card.scrollIntoView({ behavior: 'smooth' });
+
+    html5QrCode = new Html5Qrcode("barcodeReader");
+    try {
+      await html5QrCode.start(
+        { facingMode: "environment" },
+        {
+          fps: 15,
+          qrbox: (viewfinderWidth, viewfinderHeight) => ({
+            width: Math.floor(viewfinderWidth * 0.88),
+            height: Math.floor(viewfinderHeight * 0.75)
+          })
+        },
+        (decodedText) => verifyBoxBarcode(decodedText.trim())
+      );
+    } catch (err) { console.warn(err); }
+  });
+
+  function verifyBoxBarcode(scannedCode) {
+    if (!activeOrder) return;
+
+    const resBox = document.getElementById('verifyResult');
+    const icon = document.getElementById('verifyIcon');
+    const title = document.getElementById('verifyTitle');
+    const detail = document.getElementById('verifyDetail');
+
+    resBox.style.display = 'block';
+
+    const currentDrugRecord = DRUG_DB[activeOrder.code];
+
+    // 1. กรณีสแกนถูกต้อง (PASS) -> บันทึกผล PASS ลงชีตด้วย
+    if (currentDrugRecord.barcodes.includes(scannedCode)) {
+      playSound('pass');
+      const isLogged = logVerificationToSheet(
+        'PASS',
+        'Step 2: ตรวจสอบบาร์โค้ดถูกต้อง',
+        currentDrugRecord.code,
+        `${currentDrugRecord.code} - ${currentDrugRecord.name}`,
+        `${currentDrugRecord.code} - ${currentDrugRecord.name} (${scannedCode})`,
+        activeOrder.location || '-',
+        `จำนวนจัดยา: ${activeOrder.qty}`
+      );
+      resBox.className = 'verify-result verify-pass';
+      icon.textContent = '✅';
+      title.textContent = 'ถูกต้อง! ยาตรงตามใบสั่ง';
+      detail.innerHTML =
+        `หยิบ <b>${currentDrugRecord.name}</b> (รหัส ${currentDrugRecord.code})<br>` +
+        `จำนวน <b style="font-size:20px;">${activeOrder.qty}</b> หน่วย` +
+        (activeOrder.location
+          ? `<br><span class="loc-badge" style="margin-top:6px;">📍 ตำแหน่ง: ${activeOrder.location}</span>`
+          : '') +
+        (isLogged ? `<br><span class="log-badge-pass">📝 บันทึกผลการตรวจสอบ (PASS) ลงชีตแล้ว</span>` : '');
+      return;
+    }
+
+    // 2. กรณีสแกนเจอ药ตัวอื่นในฐานข้อมูล (NEAR_MISS)
+    const otherDrug = Object.values(DRUG_DB).find(d => d.barcodes.includes(scannedCode));
+    if (otherDrug) {
+      playSound('fail');
+      const isLogged = logVerificationToSheet(
+        'NEAR_MISS',
+        'Step 2: หยิบยาผิดกล่องบนชั้น',
+        currentDrugRecord.code,
+        `${currentDrugRecord.code} - ${currentDrugRecord.name} (จำนวน ${activeOrder.qty})`,
+        `${otherDrug.code} - ${otherDrug.name}`,
+        activeOrder.location || '-',
+        `บาร์โค้ดที่สแกน: ${scannedCode}`
+      );
+      resBox.className = 'verify-result verify-fail';
+      icon.textContent = '🚨';
+      title.textContent = 'ผิดพลาด! หยิบยาผิดชนิด';
+      detail.innerHTML = `ฉลากสั่ง: <b>${currentDrugRecord.name}</b><br>แต่กล่องที่สแกนคือ: <b>${otherDrug.name}</b>` +
+        (isLogged ? `<br><span class="log-badge">📝 บันทึกสถิติ Near-Miss ลงชีตแล้ว</span>` : '');
+      return;
+    }
+
+    // 3. กรณีบาร์โค้ดไม่มีในฐานข้อมูล (บันทึกเป็น NEAR_MISS เช่นกัน)
+    playSound('fail');
+    const isLoggedUnknown = logVerificationToSheet(
+      'NEAR_MISS',
+      'Step 2: บาร์โค้ดไม่ตรงฐานข้อมูล',
+      currentDrugRecord.code,
+      `${currentDrugRecord.code} - ${currentDrugRecord.name}`,
+      `ไม่พบบาร์โค้ด (${scannedCode})`,
+      activeOrder.location || '-',
+      `สแกนบาร์โค้ดนอกฐานข้อมูล (จำนวน ${activeOrder.qty})`
+    );
+    resBox.className = 'verify-result verify-unknown';
+    icon.textContent = '⚠️';
+    title.textContent = 'บาร์โค้ดนี้ไม่มีในฐานข้อมูล';
+    detail.innerHTML = `เลขบาร์โค้ด: <b>${scannedCode}</b><br>ไม่พบข้อมูลบาร์โค้ดนี้ในฐานข้อมูล (กรุณาตรวจสอบด้วยสายตาซ้ำอีกครั้ง)` +
+      (isLoggedUnknown ? `<br><span class="log-badge">📝 บันทึกผลการสแกนลงชีตแล้ว</span>` : '');
+  }
+
+  async function resetAll() {
+    if (autoScanTimer) clearInterval(autoScanTimer);
+    if (html5QrCode && html5QrCode.isScanning) await html5QrCode.stop();
+    activeOrder = null;
+    lockedQrData = '';
+    loggedScanKeys.clear();
+    document.getElementById('unlockQrBtn').style.display = 'none';
+    document.getElementById('scanBtn').textContent = '📸 ถ่ายภาพอ่านฉลาก';
+    document.getElementById('compareGrid').style.display = 'none';
+    document.getElementById('verdictBox').style.display = 'none';
+    document.getElementById('verifyResult').style.display = 'none';
+    document.getElementById('step2Card').classList.add('disabled');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    startStep1Camera();
+  }
+
+  // =========================================================================
+  // 3. ระบบตรวจสอบการอัปเดตอัตโนมัติ
+  // =========================================================================
+  let initialPageHtml = '';
+
+  fetch(window.location.pathname + '?v=' + Date.now(), { cache: 'no-store' })
+    .then(res => res.text())
+    .then(html => { initialPageHtml = html; })
+    .catch(() => {});
+
+  async function checkUpdatesWhenIdle() {
+    if (!currentUser) return;
+    const isBusyScanning = Boolean(lockedQrData || activeOrder);
+    if (isBusyScanning) return;
+
+    if (initialPageHtml) {
+      try {
+        const res = await fetch(window.location.pathname + '?v=' + Date.now(), { cache: 'no-store' });
+        const latestHtml = await res.text();
+        if (latestHtml && latestHtml !== initialPageHtml) {
+          window.location.reload();
+          return;
         }
-      };
-      img.src = URL.createObjectURL(file);
-    });
-
-    // ฟังก์ชันอ่าน OCR หน้าซองยา
-    async function runOcrOnCanvas(canvas) {
-      document.getElementById('compareSection').classList.remove('hidden');
-      document.getElementById('ocrDrugLineVal').textContent = '⏳ กำลังอ่านข้อความหน้าซอง...';
-      document.getElementById('ocrBracketVal').textContent = '';
-      document.getElementById('ocrQtyVal').textContent = '...';
-
-      try {
-        const result = await Tesseract.recognize(canvas, 'eng+tha');
-        const text = result.data.text || "";
-        const lowerText = text.toLowerCase();
-
-        // ดึงตัวเลขจำนวนในวงเล็บเหลี่ยม เช่น [38] หรือตัวเลขหลังคำว่าจำนวน
-        let qtyMatch = text.match(/\[\s*(\d+)\s*\]/) || text.match(/จำนวน\s*[:=]?\s*(\d+)/i);
-        let qty = qtyMatch ? qtyMatch[1] : "1";
-        currentScan.qty = qty;
-
-        document.getElementById('ocrBracketVal').textContent = qtyMatch ? `[${qty}] =` : '';
-        document.getElementById('ocrQtyVal').textContent = qty;
-
-        // ตรวจสอบว่าตรงกับคำสำคัญ (ocrKeywords) ของยาที่สแกน QR ได้หรือไม่
-        if (currentScan.drug) {
-          const keywords = currentScan.drug.ocrKeywords || [];
-          const isMatched = keywords.some(kw => lowerText.includes(kw.toLowerCase()));
-
-          if (isMatched) {
-            currentScan.ocrDrugText = `= ${currentScan.drug.name}`;
-            currentScan.step1Matched = true;
-            document.getElementById('ocrDrugLineVal').textContent = currentScan.ocrDrugText;
-
-            // แสดงกล่องเขียว "ยืนยัน 2 ชั้นตรงกัน!"
-            document.getElementById('mismatchAlertBox').classList.add('hidden');
-            document.getElementById('matchConfirmBox').classList.remove('hidden');
-            document.getElementById('matchCodeText').textContent = currentScan.drug.code;
-            document.getElementById('matchDrugText').textContent = currentScan.drug.name;
-            document.getElementById('matchQtyText').textContent = qty;
-            document.getElementById('matchLocText').textContent = currentScan.drug.location;
-
-            speakThai(`ยืนยันตรงกัน ${currentScan.drug.name} จำนวน ${qty} ไป Step 2`);
-          } else {
-            // พบความคลาดเคลื่อน (Near Miss ใน Step 1)
-            const snippet = text.replace(/\s+/g, ' ').trim().slice(0, 60) || "ไม่พบชื่อยาที่ตรงกัน";
-            currentScan.ocrDrugText = snippet;
-            document.getElementById('ocrDrugLineVal').textContent = snippet;
-
-            document.getElementById('matchConfirmBox').classList.add('hidden');
-            document.getElementById('mismatchAlertBox').classList.remove('hidden');
-            document.getElementById('mismatchDetailText').textContent =
-              `QR สั่งจ่าย "${currentScan.drug.name}" แต่หน้าซองอ่านได้ "${snippet}"`;
-
-            speakThai("แจ้งเตือน ชื่อยาหน้าซองไม่ตรงกับคิวอาร์โค้ด");
-
-            // บันทึก Near Miss ลง Google Sheets ทันที
-            logVerificationToSheet({
-              status: "NEAR_MISS",
-              step: "Step 1 (QR vs OCR)",
-              drugCode: currentScan.drug.code,
-              expectedDrug: currentScan.drug.name,
-              actualDrug: snippet,
-              location: currentScan.drug.location,
-              note: `OCR หน้าซองไม่ตรงกับ QR (จำนวน ${qty})`
-            });
-          }
-        } else {
-          // กรณียังไม่ได้ล็อก QR Code แต่กดอ่านฉลากก่อน
-          const snippet = text.replace(/\s+/g, ' ').trim().slice(0, 60) || "ไม่พบข้อความ";
-          document.getElementById('ocrDrugLineVal').textContent = snippet;
-        }
-      } catch (err) {
-        document.getElementById('ocrDrugLineVal').textContent = 'อ่านข้อความไม่สำเร็จ กรุณาลองใหม่';
-      }
+      } catch (e) {}
     }
 
-    // ปุ่มล้างค่า QR เพื่อสแกนใหม่
-    document.getElementById('clearQrBtn').addEventListener('click', resetForNextBag);
-    document.getElementById('retryStep1Btn').addEventListener('click', resetForNextBag);
+    loadDrugsFromAppsScript();
+  }
 
-    // ================= ไป STEP 2: สแกนบาร์โค้ดกล่องยา =================
-    document.getElementById('goToStep2Btn').addEventListener('click', async () => {
-      if (!currentScan.drug) return;
+  setInterval(checkUpdatesWhenIdle, 180000);
 
-      document.getElementById('step1Section').classList.add('hidden');
-      document.getElementById('compareSection').classList.add('hidden');
-      document.getElementById('step2Section').classList.remove('hidden');
-
-      document.getElementById('step2DrugName').textContent = `${currentScan.drug.name} (จำนวน ${currentScan.qty})`;
-      document.getElementById('step2Loc').textContent = currentScan.drug.location;
-      document.getElementById('barcodeResultBanner').classList.add('hidden');
-
-      await startStep2BarcodeScanner();
-    });
-
-    async function startStep2BarcodeScanner() {
-      stopAllCameras();
-      const videoElem = document.getElementById('videoStep2');
-      zxingReader = new ZXing.BrowserMultiFormatReader();
-
-      try {
-        await zxingReader.decodeFromVideoDevice(null, videoElem, (result, err) => {
-          if (result && !currentScan.step2Completed) {
-            const scannedBarcode = result.getText().trim();
-            handleBarcodeScanned(scannedBarcode);
-          }
-        });
-      } catch (e) {
-        const banner = document.getElementById('barcodeResultBanner');
-        banner.className = 'mismatch-box';
-        banner.textContent = '⚠️ ไม่สามารถเปิดกล้องสแกนบาร์โค้ดได้';
-        banner.classList.remove('hidden');
-      }
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      checkUpdatesWhenIdle();
     }
-
-    async function handleBarcodeScanned(scannedBarcode) {
-      const validBarcodes = currentScan.drug.barcodes || [];
-      const banner = document.getElementById('barcodeResultBanner');
-      banner.classList.remove('hidden');
-
-      if (validBarcodes.includes(scannedBarcode)) {
-        // ถูกต้อง (PASS)
-        currentScan.step2Completed = true;
-        banner.className = 'pass-banner';
-        banner.innerHTML = `✅ บาร์โค้ดถูกต้อง! (${scannedBarcode})<br>บันทึกผลการตรวจสอบ (PASS) เรียบร้อยแล้ว`;
-        speakThai("บาร์โค้ดถูกต้อง หยิบยาได้");
-
-        await logVerificationToSheet({
-          status: "PASS",
-          step: "Step 2 (Barcode)",
-          drugCode: currentScan.drug.code,
-          expectedDrug: currentScan.drug.name,
-          actualDrug: `${currentScan.drug.name} (${scannedBarcode})`,
-          location: currentScan.drug.location,
-          note: `จำนวนจัดยา: ${currentScan.qty}`
-        });
-      } else {
-        // หยิบยาผิดกล่อง (NEAR_MISS)
-        currentScan.step2Completed = true;
-        const wrongDrug = drugDatabase.find(d => (d.barcodes || []).includes(scannedBarcode));
-        const actualLabel = wrongDrug ? `${wrongDrug.name} (${scannedBarcode})` : `บาร์โค้ดไม่ตรง (${scannedBarcode})`;
-
-        banner.className = 'mismatch-box';
-        banner.innerHTML = `<div class="mismatch-title">🚨 หยิบยาผิดกล่อง (NEAR MISS)!</div>
-          <div>ต้องหยิบ: <strong>${currentScan.drug.name}</strong> (พิกัด ${currentScan.drug.location})</div>
-          <div>แต่สแกนพบ: <strong>${actualLabel}</strong></div>`;
-        speakThai("เตือนภัย หยิบยาผิดกล่อง กรุณาตรวจสอบใหม่");
-
-        await logVerificationToSheet({
-          status: "NEAR_MISS",
-          step: "Step 2 (Barcode)",
-          drugCode: currentScan.drug.code,
-          expectedDrug: currentScan.drug.name,
-          actualDrug: actualLabel,
-          location: currentScan.drug.location,
-          note: `สแกนบาร์โค้ดผิดบนชั้น (จำนวน ${currentScan.qty})`
-        });
-
-        // อนุญาตให้สแกนกล่องที่ถูกต้องซ้ำได้หลังผ่านไป 3 วินาที
-        setTimeout(() => {
-          currentScan.step2Completed = false;
-        }, 3000);
-      }
-    }
-
-    // ปุ่มสแกนซองยาถัดไป
-    document.getElementById('nextBagBtn').addEventListener('click', resetForNextBag);
-
-    async function resetForNextBag() {
-      currentScan = {
-        hn: "-",
-        drug: null,
-        ocrDrugText: "-",
-        qty: "-",
-        step1Matched: false,
-        step2Completed: false
-      };
-
-      document.getElementById('qrBadgeTop').textContent = '🔎 กำลังมองหา QR Code อัตโนมัติ...';
-      document.getElementById('compareSection').classList.add('hidden');
-      document.getElementById('matchConfirmBox').classList.add('hidden');
-      document.getElementById('mismatchAlertBox').classList.add('hidden');
-      document.getElementById('step2Section').classList.add('hidden');
-      document.getElementById('step1Section').classList.remove('hidden');
-
-      await startStep1Camera();
-    }
-
-    // ================= บันทึกผลลง Google Sheets =================
-    async function logVerificationToSheet(payload) {
-      if (!currentUser) return;
-      const body = {
-        status: payload.status,
-        step: payload.step,
-        staffId: currentUser.staffId,
-        staffName: currentUser.name,
-        hn: currentScan.hn || "-",
-        dept: currentDept,
-        drugCode: payload.drugCode,
-        expectedDrug: payload.expectedDrug,
-        actualDrug: payload.actualDrug,
-        location: payload.location,
-        note: payload.note
-      };
-
-      try {
-        await fetch(APPS_SCRIPT_URL, {
-          method: 'POST',
-          mode: 'no-cors',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body)
-        });
-      } catch (e) {
-        console.error('Log failed:', e);
-      }
-    }
-  </script>
+  });
+</script>
 </body>
 </html>
