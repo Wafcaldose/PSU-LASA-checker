@@ -521,11 +521,11 @@
       <form id="loginForm">
         <div class="form-group">
           <label for="staffIdInput">รหัสผู้ปฏิบัติงาน (Staff ID)</label>
-          <input type="text" id="staffIdInput" inputmode="numeric" pattern="[0-9]*" oninput="this.value = this.value.replace(/[^0-9]/g, '')" placeholder="กรอกรหัสตัวเลขเท่านั้น" required autocomplete="off" />
+          <input type="text" id="staffIdInput" inputmode="numeric" pattern="[0-9]*" oninput="this.value = this.value.replace(/[^0-9]/g, '')" placeholder="กรอกรหัสเจ้าหน้าที่" required autocomplete="off" />
         </div>
         <div class="form-group">
           <label for="pinInput">รหัสผ่าน (PIN)</label>
-          <input type="password" id="pinInput" inputmode="numeric" pattern="[0-9]*" oninput="this.value = this.value.replace(/[^0-9]/g, '')" placeholder="กรอกรหัส PIN ตัวเลขเท่านั้น" required />
+          <input type="password" id="pinInput" inputmode="numeric" pattern="[0-9]*" oninput="this.value = this.value.replace(/[^0-9]/g, '')" placeholder="กรอกรหัส PIN 6 หลัก" required />
         </div>
         <button type="submit" id="loginBtn" class="btn-primary">เข้าสู่ระบบ</button>
         <div id="loginError" class="error-msg"></div>
