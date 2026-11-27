@@ -96,6 +96,7 @@
       padding: 4px 12px;
       border-radius: 12px;
       box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+      text-align: center;
     }
     .guide-hint {
       background: rgba(15, 23, 42, 0.65);
@@ -112,6 +113,8 @@
     }
     .btn-primary { background: #0284c7; color: white; width: 100%; }
     .btn-primary:disabled { background: #7dd3fc; }
+    .btn-toggle-auto { background: #0d9488; color: white; }
+    .btn-toggle-auto.paused { background: #f59e0b; color: #fff; }
     .btn-purple { background: #7c3aed; color: white; width: 100%; margin-top: 10px; }
     .file-btn { background: #e2e8f0; color: #1e293b; }
     .btn-reset { background: #475569; color: white; width: 100%; margin-top: 12px; }
@@ -234,23 +237,24 @@
       </div>
     </div>
 
-    <!-- ==================== STEP 1: FULL-FRAME QR LOCK + OCR ==================== -->
+    <!-- ==================== STEP 1: FULL-FRAME AUTO QR + AUTO OCR ==================== -->
     <div class="card" id="step1Card">
-      <h2>Step 1: สแกนฉลากยา (เต็มกรอบกล้อง)</h2>
-      <p class="sub">ส่องซองยาให้เห็นทั้งใบ ระบบจะล็อก QR Code อัตโนมัติแล้วสะสมค่าที่อ่านได้ทีละส่วน</p>
+      <h2>Step 1: สแกนฉลากยา (อัตโนมัติทั้ง QR & OCR)</h2>
+      <p class="sub">ส่องซองยาให้เห็นทั้งใบ ระบบจะล็อก QR Code และถ่ายอ่าน OCR สะสมให้อัตโนมัติจนครบ 4 ค่า</p>
 
       <div class="camera-wrapper" id="cameraWrapper">
         <video id="video" autoplay playsinline></video>
         <div class="full-frame-guide">
           <span class="live-badge" id="liveBadge">🔎 กำลังมองหา QR Code อัตโนมัติ...</span>
-          <span class="guide-hint">ถือให้นิ่งและหลบแสงสะท้อนบนซองพลาสติก</span>
+          <span class="guide-hint" id="guideHint">ส่องซองยาให้อยู่ในกรอบ ระบบอ่านให้อัตโนมัติ</span>
         </div>
       </div>
 
       <div class="btn-group">
-        <button id="scanBtn" class="btn-primary">📸 ถ่ายภาพอ่านฉลาก</button>
+        <button id="toggleAutoOcrBtn" type="button" class="btn-toggle-auto" onclick="toggleAutoOcr()">🤖 OCR อัตโนมัติ: เปิด</button>
+        <button id="scanBtn" type="button" class="btn-primary">📸 ถ่ายอ่านทันที</button>
         <label class="file-btn">
-          📁 เลือกรูปซอง
+          📁 เลือกรูป
           <input type="file" id="uploadInput" accept="image/*" hidden>
         </label>
       </div>
@@ -316,9 +320,13 @@
   let step1Stream = null;
   let html5QrCode = null;
   let autoScanTimer = null;
+  let autoOcrTimer = null;
+  let autoOcrEnabled = true;
   let isProcessing = false;
   let lockedQrData = '';
   let loggedScanKeys = new Set();
+  let sharedOcrWorker = null;
+  let ocrWorkerPromise = null;
 
   // เก็บสถานะสะสมของค่า OCR ทั้ง 4 ค่าสำหรับซองยาที่กำลังสแกน (ค่าไหนผ่านแล้วจะจำไว้ ไม่ต้องอ่านติดพร้อมกันในครั้งเดียว)
   function createEmptyOcrState() {
@@ -331,7 +339,9 @@
       qtyPassed: false,
       qtyValue: '',
       locPassed: false,
-      locValue: ''
+      locValue: '',
+      isComplete: false,
+      hasConflict: false
     };
   }
   let ocrProgress = createEmptyOcrState();
@@ -339,6 +349,74 @@
   const video = document.getElementById('video');
   const statusEl = document.getElementById('status');
   const liveBadge = document.getElementById('liveBadge');
+  const guideHint = document.getElementById('guideHint');
+
+  // สร้างและใช้ Tesseract Worker ตัวเดียวซ้ำเพื่อความรวดเร็วในการสแกน OCR อัตโนมัติ
+  async function getOcrWorker() {
+    if (sharedOcrWorker) return sharedOcrWorker;
+    if (!ocrWorkerPromise) {
+      ocrWorkerPromise = Tesseract.createWorker('eng')
+        .then(worker => {
+          sharedOcrWorker = worker;
+          return worker;
+        })
+        .catch(err => {
+          ocrWorkerPromise = null;
+          throw err;
+        });
+    }
+    return ocrWorkerPromise;
+  }
+
+  async function terminateOcrWorker() {
+    if (sharedOcrWorker) {
+      try { await sharedOcrWorker.terminate(); } catch (e) {}
+      sharedOcrWorker = null;
+      ocrWorkerPromise = null;
+    }
+  }
+
+  function stopAutoOcrLoop() {
+    if (autoOcrTimer) {
+      clearInterval(autoOcrTimer);
+      autoOcrTimer = null;
+    }
+  }
+
+  function startAutoOcrLoop() {
+    stopAutoOcrLoop();
+    if (!autoOcrEnabled || !currentUser || !lockedQrData || ocrProgress.isComplete || ocrProgress.hasConflict) return;
+
+    autoOcrTimer = setInterval(() => {
+      if (!autoOcrEnabled || !currentUser || !lockedQrData) {
+        stopAutoOcrLoop();
+        return;
+      }
+      if (ocrProgress.isComplete || ocrProgress.hasConflict) {
+        stopAutoOcrLoop();
+        return;
+      }
+      if (isProcessing || !video.videoWidth || video.paused) return;
+
+      processFullFrame(captureHighResFrame(), true);
+    }, 900);
+  }
+
+  function toggleAutoOcr() {
+    autoOcrEnabled = !autoOcrEnabled;
+    const btn = document.getElementById('toggleAutoOcrBtn');
+    if (autoOcrEnabled) {
+      btn.textContent = '🤖 OCR อัตโนมัติ: เปิด';
+      btn.classList.remove('paused');
+      if (lockedQrData && !ocrProgress.isComplete && !ocrProgress.hasConflict) {
+        startAutoOcrLoop();
+      }
+    } else {
+      btn.textContent = '⏸️ OCR อัตโนมัติ: ปิด';
+      btn.classList.add('paused');
+      stopAutoOcrLoop();
+    }
+  }
 
   // =========================================================================
   // 0. ระบบเข้าสู่ระบบ (Login ตรวจสอบกับแท็บ Users: staffid / name / role / pin)
@@ -379,6 +457,8 @@
         document.getElementById('loginView').style.display = 'none';
         document.getElementById('appView').style.display = 'block';
 
+        // เตรียม OCR Worker ล่วงหน้าเพื่อให้สแกนอัตโนมัติได้ทันที
+        getOcrWorker().catch(() => {});
         loadDrugsFromAppsScript();
         startStep1Camera();
       } else {
@@ -396,10 +476,12 @@
 
   async function logoutUser() {
     if (autoScanTimer) clearInterval(autoScanTimer);
+    stopAutoOcrLoop();
     if (step1Stream) step1Stream.getTracks().forEach(t => t.stop());
     if (html5QrCode && html5QrCode.isScanning) {
       try { await html5QrCode.stop(); } catch (e) {}
     }
+    await terminateOcrWorker();
     currentUser = null;
     activeOrder = null;
     lockedQrData = '';
@@ -542,7 +624,7 @@
     }
   }
 
-  // ================= STEP 1: กล้อง + ล็อกค่า QR Code =================
+  // ================= STEP 1: กล้อง + ล็อกค่า QR + อ่าน OCR อัตโนมัติ =================
   async function startStep1Camera() {
     if (!currentUser) return;
     isProcessing = false;
@@ -561,10 +643,13 @@
       if (!lockedQrData) {
         liveBadge.textContent = '🔎 กำลังมองหา QR Code อัตโนมัติ...';
         liveBadge.style.background = 'rgba(2, 132, 199, 0.9)';
+        guideHint.textContent = 'ส่องซองยาให้อยู่ในกรอบ ระบบอ่านให้อัตโนมัติ';
         startLiveQrLoop();
+      } else if (autoOcrEnabled && !ocrProgress.isComplete && !ocrProgress.hasConflict) {
+        startAutoOcrLoop();
       }
     } catch (err) {
-      statusEl.textContent = '⚠️ ไม่พบกล้อง (กด "เลือกรูปซอง" เพื่อทดสอบได้)';
+      statusEl.textContent = '⚠️ ไม่พบกล้อง (กด "เลือกรูป" เพื่อทดสอบได้)';
       statusEl.style.color = '#dc2626';
     }
   }
@@ -625,9 +710,15 @@
       ? `<br>ตำแหน่ง: <span class="loc-badge">📍 ${drug.location}</span>`
       : '';
 
-    liveBadge.textContent = `🔒 ล็อก QR สำเร็จ! (รหัสยา: ${code})`;
-    liveBadge.style.background = 'rgba(22, 163, 74, 0.95)';
-    document.getElementById('scanBtn').textContent = '📸 ถ่ายภาพอ่านค่าที่เหลือ (OCR) เพิ่ม';
+    if (ocrProgress.isComplete) {
+      liveBadge.textContent = `✅ อ่านครบ 4/4 ค่าแล้ว! (รหัสยา: ${code})`;
+      liveBadge.style.background = 'rgba(22, 163, 74, 0.95)';
+      guideHint.textContent = 'กดปุ่มสีม่วงด้านล่างเพื่อไป Step 2';
+    } else {
+      liveBadge.textContent = `🔒 ล็อก QR สำเร็จ (${code}) • กำลังอ่าน OCR อัตโนมัติ...`;
+      liveBadge.style.background = 'rgba(2, 132, 199, 0.95)';
+      guideHint.textContent = 'ขยับมุมกล้องเล็กน้อยหากแสงสะท้อนจนครบ 4 ค่า';
+    }
 
     document.getElementById('compareGrid').style.display = 'grid';
     document.getElementById('unlockQrBtn').style.display = 'inline-block';
@@ -637,6 +728,7 @@
   }
 
   function unlockQr() {
+    stopAutoOcrLoop();
     lockedQrData = '';
     activeOrder = null;
     ocrProgress = createEmptyOcrState();
@@ -644,9 +736,9 @@
     document.getElementById('qrResultText').innerHTML = '-';
     document.getElementById('ocrResultText').innerHTML = '-';
     document.getElementById('verdictBox').style.display = 'none';
-    document.getElementById('scanBtn').textContent = '📸 ถ่ายภาพอ่านฉลาก';
     liveBadge.textContent = '🔎 กำลังมองหา QR Code อัตโนมัติ...';
     liveBadge.style.background = 'rgba(2, 132, 199, 0.9)';
+    guideHint.textContent = 'ส่องซองยาให้อยู่ในกรอบ ระบบอ่านให้อัตโนมัติ';
     startLiveQrLoop();
   }
 
@@ -664,17 +756,22 @@
         ocrProgress.qrCode = foundQr;
         clearInterval(autoScanTimer);
         renderLockedQrUI();
-        processFullFrame(frameCanvas);
+        await processFullFrame(frameCanvas, true);
+        if (autoOcrEnabled && !ocrProgress.isComplete && !ocrProgress.hasConflict) {
+          startAutoOcrLoop();
+        }
       }
     }, 350);
   }
 
-  async function processFullFrame(fullCanvas) {
+  async function processFullFrame(fullCanvas, isAuto = false) {
     if (isProcessing) return;
     isProcessing = true;
     document.getElementById('scanBtn').disabled = true;
 
-    statusEl.textContent = '⏳ กำลังอ่านตัวอักษรหน้าซอง (OCR) เพื่อเทียบกับ QR...';
+    statusEl.textContent = isAuto
+      ? '🤖 กำลังอ่าน OCR อัตโนมัติ...'
+      : '⏳ กำลังอ่านตัวอักษรหน้าซอง (OCR) เพื่อเทียบกับ QR...';
     statusEl.style.color = '#0284c7';
 
     if (!lockedQrData) {
@@ -715,11 +812,12 @@
       }
       ocrCtx.putImageData(imgData, 0, 0);
 
-      const worker = await Tesseract.createWorker('eng');
-      const ret = await worker.recognize(ocrCanvas.toDataURL('image/png'));
-      await worker.terminate();
+      const worker = await getOcrWorker();
+      const ret = await worker.recognize(ocrCanvas);
       rawOcr = ret.data.text;
-    } catch (e) { rawOcr = ''; }
+    } catch (e) {
+      rawOcr = '';
+    }
 
     const lines = rawOcr.split('\n').map(l => l.trim()).filter(l => l.length > 1);
     const fullLower = rawOcr.toLowerCase();
@@ -809,7 +907,6 @@
     const compactLoc = shelfLocation.toLowerCase().replace(/\s+/g, '');
 
     if (!shelfLocation && drugFromQR) {
-      // กรณีในฐานข้อมูลไม่ได้ระบุตำแหน่งไว้ ให้ถือว่าผ่านส่วนตำแหน่ง
       ocrProgress.locPassed = true;
       ocrProgress.locValue = '-';
     } else if (shelfLocation && compactOcr.includes(compactLoc)) {
@@ -821,21 +918,13 @@
       ? `<span class="loc-badge">📍 ${shelfLocation}</span>`
       : '';
 
-    document.getElementById('compareGrid').style.display = 'grid';
-    if (lockedQrData) {
-      renderLockedQrUI();
-    } else {
-      document.getElementById('qrResultText').innerHTML =
-        '<span style="color:#dc2626;">ยังจับ QR ไม่ได้ (กำลังสแกนหาอัตโนมัติ...)</span>';
-    }
-
-    // แสดงสถานะสะสมทั้ง 4 รายการ (ค่าไหนผ่านแล้วจะขึ้น ✅ และจำไว้ตลอดสำหรับซองนี้)
+    // แสดงสถานะสะสมทั้ง 4 รายการ
     const displayDrugName = ocrProgress.namePassed
       ? ocrProgress.nameValue
-      : (drugFromOCR ? `${drugFromOCR.name} (ไม่ตรง QR)` : 'รออ่านซ้ำ');
-    const displayStrength = ocrProgress.strengthPassed ? ocrProgress.strengthValue : 'รออ่านซ้ำ';
-    const displayQty = ocrProgress.qtyPassed ? ocrProgress.qtyValue : 'รออ่านซ้ำ';
-    const displayLoc = ocrProgress.locPassed ? ocrProgress.locValue : 'รออ่านซ้ำ';
+      : (drugFromOCR ? `${drugFromOCR.name} (ไม่ตรง QR)` : 'กำลังอ่าน...');
+    const displayStrength = ocrProgress.strengthPassed ? ocrProgress.strengthValue : 'กำลังอ่าน...';
+    const displayQty = ocrProgress.qtyPassed ? ocrProgress.qtyValue : 'กำลังอ่าน...';
+    const displayLoc = ocrProgress.locPassed ? ocrProgress.locValue : 'กำลังอ่าน...';
 
     document.getElementById('ocrResultText').innerHTML =
       `<div>${ocrProgress.namePassed ? '✅' : '⏳'} ชื่อยา: <b>${displayDrugName}</b></div>` +
@@ -849,7 +938,6 @@
     verdictBox.style.display = 'block';
     goBtn.style.display = 'none';
 
-    // แจ้งเตือน Near-Miss ทันทีหากอ่านเจอชื่อยาตัวอื่นคนละชนิดกับ QR
     const isDifferentDrug = drugFromQR && drugFromOCR && drugFromQR.code !== drugFromOCR.code && !ocrProgress.namePassed;
     const isAllFourComplete = Boolean(
       drugFromQR &&
@@ -860,6 +948,8 @@
     );
 
     if (isDifferentDrug) {
+      ocrProgress.hasConflict = true;
+      stopAutoOcrLoop();
       playSound('fail');
       const isLogged = logVerificationToSheet(
         'NEAR_MISS',
@@ -873,7 +963,12 @@
       verdictBox.className = 'verdict-box verdict-fail';
       verdictMsg.innerHTML = `🚨 <b>ข้อมูลขัดแย้งกัน!</b><br>QR คือ <b>${drugFromQR.name}</b> แต่หน้าซองคือ <b>${drugFromOCR.name}</b>` +
         (isLogged ? `<br><span class="log-badge">📝 บันทึกสถิติ Near-Miss ลงชีตแล้ว</span>` : '');
+      statusEl.textContent = '🚨 พบข้อมูลฉลากไม่ตรงกับ QR';
+      statusEl.style.color = '#dc2626';
     } else if (isAllFourComplete) {
+      ocrProgress.isComplete = true;
+      stopAutoOcrLoop();
+      playSound('pass');
       activeOrder = { ...drugFromQR, qty: ocrProgress.qtyValue, location: shelfLocation };
       verdictBox.className = 'verdict-box verdict-pass';
       verdictMsg.innerHTML =
@@ -881,6 +976,8 @@
         `จัดยา: <b>${drugFromQR.name}</b> จำนวน <b>${ocrProgress.qtyValue}</b>` +
         (locationBadgeHtml ? `<div style="margin-top:6px; font-size:15px;">ตำแหน่งจัดเก็บยา: ${locationBadgeHtml}</div>` : '');
       goBtn.style.display = 'block';
+      statusEl.textContent = '✅ อ่าน OCR ครบทั้ง 4 ค่าเรียบร้อย!';
+      statusEl.style.color = '#059669';
     } else if (drugFromQR) {
       const missingItems = [];
       if (!ocrProgress.namePassed) missingItems.push('ชื่อยา');
@@ -892,26 +989,41 @@
       verdictBox.className = 'verdict-box verdict-warn';
       verdictMsg.innerHTML =
         `⏳ <b>ผ่านแล้ว ${passedCount}/4 รายการ</b> — เหลืออีก: <b>${missingItems.join(', ')}</b><br>` +
-        `<small style="display:block; margin-top:4px;">ค่าที่ผ่านแล้วถูกบันทึกไว้เรียบร้อย ส่องเฉพาะจุดที่เหลือแล้วกด <b>"📸 ถ่ายภาพอ่านค่าที่เหลือ (OCR) เพิ่ม"</b> ได้เลย</small>`;
+        `<small style="display:block; margin-top:4px;">${autoOcrEnabled ? '🤖 ระบบกำลังสแกน OCR อัตโนมัติต่อเนื่อง ส่องให้เห็นส่วนที่เหลือได้เลย' : '⏸️ ปิด OCR อัตโนมัติอยู่ กดปุ่ม "📸 ถ่ายอ่านทันที" เพื่ออ่านเพิ่ม'}</small>`;
+      statusEl.textContent = autoOcrEnabled
+        ? `🤖 อ่านอัตโนมัติต่อเนื่อง (${passedCount}/4 รายการ)...`
+        : `⏸️ ผ่านแล้ว ${passedCount}/4 รายการ`;
+      statusEl.style.color = '#0284c7';
     } else if (lockedQrData && !drugFromQR) {
+      stopAutoOcrLoop();
       verdictBox.className = 'verdict-box verdict-fail';
       verdictMsg.innerHTML = `❌ ล็อกรหัสยา <b>${extractedDrugCode}</b> ได้แล้ว แต่ยังไม่พบใน Google Sheets`;
+      statusEl.textContent = '⚠️ ไม่พบรหัสยาในฐานข้อมูล';
+      statusEl.style.color = '#dc2626';
     } else {
       verdictBox.className = 'verdict-box verdict-fail';
       verdictMsg.innerHTML = `❌ ยังอ่าน QR Code ไม่ติด กรุณาส่องไปที่มุมขวาบนของซองยา`;
+      statusEl.textContent = '🔎 กำลังมองหา QR Code...';
+      statusEl.style.color = '#d97706';
       isProcessing = false;
       startLiveQrLoop();
     }
 
-    statusEl.textContent = '✅ เสร็จสิ้น';
-    statusEl.style.color = '#059669';
+    document.getElementById('compareGrid').style.display = 'grid';
+    if (lockedQrData) {
+      renderLockedQrUI();
+    } else {
+      document.getElementById('qrResultText').innerHTML =
+        '<span style="color:#dc2626;">ยังจับ QR ไม่ได้ (กำลังสแกนหาอัตโนมัติ...)</span>';
+    }
+
     document.getElementById('scanBtn').disabled = false;
     isProcessing = false;
   }
 
   document.getElementById('scanBtn').addEventListener('click', () => {
     if (!video.videoWidth) return;
-    processFullFrame(captureHighResFrame());
+    processFullFrame(captureHighResFrame(), false);
   });
 
   document.getElementById('uploadInput').addEventListener('change', (e) => {
@@ -920,6 +1032,7 @@
     lockedQrData = '';
     ocrProgress = createEmptyOcrState();
     if (autoScanTimer) clearInterval(autoScanTimer);
+    stopAutoOcrLoop();
     const reader = new FileReader();
     reader.onload = (ev) => {
       const img = new Image();
@@ -928,7 +1041,7 @@
         c.width = img.width;
         c.height = img.height;
         c.getContext('2d').drawImage(img, 0, 0);
-        processFullFrame(c);
+        processFullFrame(c, false);
       };
       img.src = ev.target.result;
     };
@@ -938,6 +1051,7 @@
   // ================= STEP 2: ยิงบาร์โค้ดกล่องยาแบบเต็มกรอบ =================
   document.getElementById('goStep2Btn').addEventListener('click', async () => {
     if (autoScanTimer) clearInterval(autoScanTimer);
+    stopAutoOcrLoop();
     if (step1Stream) step1Stream.getTracks().forEach(t => t.stop());
 
     const step2Card = document.getElementById('step2Card');
@@ -997,7 +1111,7 @@
       return;
     }
 
-    // 2. กรณีสแกนเจอ药ตัวอื่นในฐานข้อมูล (NEAR_MISS)
+    // 2. กรณีสแกนเจอยาตัวอื่นในฐานข้อมูล (NEAR_MISS)
     const otherDrug = Object.values(DRUG_DB).find(d => d.barcodes.includes(scannedCode));
     if (otherDrug) {
       playSound('fail');
@@ -1038,13 +1152,13 @@
 
   async function resetAll() {
     if (autoScanTimer) clearInterval(autoScanTimer);
+    stopAutoOcrLoop();
     if (html5QrCode && html5QrCode.isScanning) await html5QrCode.stop();
     activeOrder = null;
     lockedQrData = '';
     ocrProgress = createEmptyOcrState();
     loggedScanKeys.clear();
     document.getElementById('unlockQrBtn').style.display = 'none';
-    document.getElementById('scanBtn').textContent = '📸 ถ่ายภาพอ่านฉลาก';
     document.getElementById('compareGrid').style.display = 'none';
     document.getElementById('verdictBox').style.display = 'none';
     document.getElementById('verifyResult').style.display = 'none';
@@ -1052,6 +1166,10 @@
     window.scrollTo({ top: 0, behavior: 'smooth' });
     startStep1Camera();
   }
+
+  window.addEventListener('beforeunload', () => {
+    terminateOcrWorker();
+  });
 
   // =========================================================================
   // 3. ระบบตรวจสอบการอัปเดตอัตโนมัติ
