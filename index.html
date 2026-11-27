@@ -299,7 +299,7 @@
 
 <script>
   // ⚠️ วางลิงก์ Google Apps Script (/exec) ของคุณที่นี่ (ดึงข้อมูลยา, Login และบันทึกผลผ่านลิงก์นี้ทั้งหมด)
-  const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxhZmS1A54ftdDAXkwhAYTI2JiDbG_win1NBrOM2iegzai5Pp1j_EQbVYu4l3IrAW8/exec";
+  const APPS_SCRIPT_URL = "วางลิงก์_Apps_Script_Web_App_ของคุณที่นี่";
 
   let DRUG_DB = {
     "1564": {
@@ -399,7 +399,7 @@
   async function loadDrugsFromAppsScript() {
     const dbStatus = document.getElementById('dbStatus');
 
-    if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL === "วางลิงก์_Apps_Script_Web_App_ของคุณที่นี่") {
+    if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL === "https://script.google.com/macros/s/AKfycbxhZmS1A54ftdDAXkwhAYTI2JiDbG_win1NBrOM2iegzai5Pp1j_EQbVYu4l3IrAW8/exec") {
       dbStatus.textContent = '⚠️ ยังไม่ได้ใส่ลิงก์ APPS_SCRIPT_URL ในโค้ด';
       dbStatus.style.color = '#d97706';
       updateDbBadge();
@@ -673,7 +673,20 @@
       const ocrH = Math.round(ocrW * (fullCanvas.height / fullCanvas.width));
       ocrCanvas.width = ocrW;
       ocrCanvas.height = ocrH;
-      ocrCanvas.getContext('2d').drawImage(fullCanvas, 0, 0, ocrW, ocrH);
+      const ocrCtx = ocrCanvas.getContext('2d');
+      ocrCtx.drawImage(fullCanvas, 0, 0, ocrW, ocrH);
+
+      // ปรับภาพเป็นขาวดำและเพิ่ม Contrast เพื่อให้อ่านชื่อยา ความแรง จำนวน และตำแหน่งแม่นยำขึ้น
+      const imgData = ocrCtx.getImageData(0, 0, ocrW, ocrH);
+      const d = imgData.data;
+      const contrast = 1.4;
+      const intercept = 128 * (1 - contrast);
+      for (let i = 0; i < d.length; i += 4) {
+        const gray = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+        const adj = Math.min(255, Math.max(0, gray * contrast + intercept));
+        d[i] = d[i + 1] = d[i + 2] = adj;
+      }
+      ocrCtx.putImageData(imgData, 0, 0);
 
       const worker = await Tesseract.createWorker('eng');
       const ret = await worker.recognize(ocrCanvas.toDataURL('image/png'));
@@ -681,21 +694,98 @@
       rawOcr = ret.data.text;
     } catch (e) { rawOcr = ''; }
 
-    const lines = rawOcr.split('\n').map(l => l.trim()).filter(l => l.length > 2);
+    const lines = rawOcr.split('\n').map(l => l.trim()).filter(l => l.length > 1);
     const fullLower = rawOcr.toLowerCase();
+    // ลบช่องว่างเพื่อช่วยเทียบกรณี OCR เว้นวรรคเช่น "2.5 mg" vs "2.5mg" หรือ "12 Ac" vs "12Ac"
+    const compactOcr = fullLower.replace(/\s+/g, '');
 
     const drugFromQR = DRUG_DB[extractedDrugCode] || null;
     const drugFromOCR = Object.values(DRUG_DB).find(d => d.ocrKeywords.some(k => fullLower.includes(k))) || null;
 
+    // 1. ค้นหาบรรทัดยาจาก OCR
     let matchedLine = '';
-    if (drugFromOCR) {
+    if (drugFromQR) {
+      matchedLine = lines.find(line => drugFromQR.ocrKeywords.some(k => line.toLowerCase().includes(k))) || '';
+    }
+    if (!matchedLine && drugFromOCR) {
       matchedLine = lines.find(line => drugFromOCR.ocrKeywords.some(k => line.toLowerCase().includes(k))) || '';
     }
-    const qtyMatch = matchedLine.match(/[\[\(\{]\s*(\d+)\s*[\]\)\}]/) || matchedLine.match(/\s(\d{1,3})$/);
-    const qty = qtyMatch ? qtyMatch[1] : 'ไม่ระบุ';
 
-    // ดึงตำแหน่งจัดเก็บยาจากฐานข้อมูล (ตามรหัสยาใน QR Code)
-    const shelfLocation = (drugFromQR && drugFromQR.location) ? drugFromQR.location : '';
+    // 2. แยก "ชื่อยา" และ "ความแรง" จากรายการยาเป้าหมาย (drugFromQR) เพื่อตรวจสอบกับ OCR
+    const strengthRegex = /(\d+(?:\.\d+)?\s*(?:mg|g|mcg|ml|%|iu|meq|mmol)(?:\/\d*(?:\.\d+)?\s*(?:ml|mg|g))?)/gi;
+    let expectedStrengths = [];
+    let expectedNameWords = [];
+    if (drugFromQR) {
+      const strMatches = drugFromQR.name.match(strengthRegex);
+      if (strMatches) {
+        expectedStrengths = strMatches.map(s => s.toLowerCase().replace(/\s+/g, ''));
+      }
+      const nameWithoutStrength = drugFromQR.name.replace(strengthRegex, ' ').replace(/[\[\]\(\)\/\-]/g, ' ');
+      expectedNameWords = nameWithoutStrength
+        .split(/\s+/)
+        .map(w => w.trim().toLowerCase())
+        .filter(w => w.length >= 3);
+    }
+
+    // ตรวจสอบว่า OCR อ่าน "ชื่อยา" ได้ครบตามคำหลักหรือไม่
+    const ocrNameMatched = drugFromQR
+      ? (expectedNameWords.length > 0
+          ? expectedNameWords.every(w => fullLower.includes(w))
+          : drugFromQR.ocrKeywords.some(k => fullLower.includes(k)))
+      : Boolean(drugFromOCR);
+
+    const detectedDrugName = ocrNameMatched
+      ? (drugFromQR ? drugFromQR.name.replace(strengthRegex, '').replace(/\s+/g, ' ').trim() : drugFromOCR.name)
+      : (drugFromOCR ? drugFromOCR.name : '');
+
+    // ตรวจสอบว่า OCR อ่าน "ความแรง" ได้ครบถ้วนหรือไม่ (ป้องกันสับสนยาชื่อเหมือนกันแต่คนละความแรง)
+    let ocrStrengthMatched = false;
+    let detectedStrength = '';
+    if (drugFromQR) {
+      if (expectedStrengths.length > 0) {
+        ocrStrengthMatched = expectedStrengths.every(st => compactOcr.includes(st));
+        const foundSt = expectedStrengths.filter(st => compactOcr.includes(st));
+        detectedStrength = foundSt.length > 0 ? foundSt.join(', ') : '';
+      } else {
+        ocrStrengthMatched = true;
+        detectedStrength = '-';
+      }
+    } else {
+      const anyStr = rawOcr.match(strengthRegex);
+      if (anyStr) {
+        ocrStrengthMatched = true;
+        detectedStrength = anyStr.join(', ');
+      }
+    }
+
+    // 3. ดึง "จำนวนยา" จาก OCR (บังคับต้องอ่านตัวเลขได้ ห้ามเป็น 'ไม่ระบุ')
+    let qty = '';
+    const searchScope = matchedLine || rawOcr;
+    const qtyMatch =
+      searchScope.match(/[\[\(\{]\s*(\d{1,4})\s*[\]\)\}]/) ||
+      searchScope.match(/(?:จำนวน|qty|x|\*)\s*[:=]?\s*(\d{1,4})/i) ||
+      (matchedLine ? matchedLine.match(/\s(\d{1,3})(?:\s*[=\]\)\}])?$/) : null);
+    if (qtyMatch && qtyMatch[1]) {
+      qty = qtyMatch[1];
+    }
+    const ocrQtyMatched = Boolean(qty);
+
+    // 4. ดึงและตรวจสอบ "ตำแหน่งจัดเก็บยา" จาก OCR
+    const shelfLocation = (drugFromQR && drugFromQR.location) ? drugFromQR.location.trim() : '';
+    const compactLoc = shelfLocation.toLowerCase().replace(/\s+/g, '');
+    let detectedLocation = '';
+    let ocrLocMatched = false;
+
+    if (shelfLocation && compactOcr.includes(compactLoc)) {
+      detectedLocation = shelfLocation;
+      ocrLocMatched = true;
+    } else {
+      const locPatternMatch = rawOcr.match(/\b(\d{1,2}[A-Za-z]{1,3}|[A-Za-z]{1,2}-?\d{1,3})\b/);
+      if (locPatternMatch) {
+        detectedLocation = locPatternMatch[1];
+      }
+    }
+
     const locationBadgeHtml = shelfLocation
       ? `<span class="loc-badge">📍 ${shelfLocation}</span>`
       : '';
@@ -708,11 +798,12 @@
         '<span style="color:#dc2626;">ยังจับ QR ไม่ได้ (กำลังสแกนหาอัตโนมัติ...)</span>';
     }
 
-    document.getElementById('ocrResultText').innerHTML = matchedLine
-      ? `บรรทัดยา: <b>${matchedLine}</b><br>จำนวน: <b style="color:#dc2626;">${qty}</b>`
-      : (drugFromOCR
-          ? `พบคำว่า: <b>${drugFromOCR.name}</b>`
-          : `<span style="color:#dc2626;">อ่านชื่อยาไม่ติด (กดถ่ายซ้ำได้ QR ยังล็อกอยู่)</span>`);
+    // แสดงรายละเอียดครบทั้ง 4 รายการในฝั่ง OCR
+    document.getElementById('ocrResultText').innerHTML =
+      `<div>${ocrNameMatched ? '✅' : '❌'} ชื่อยา: <b>${detectedDrugName || 'อ่านไม่ติด'}</b></div>` +
+      `<div>${ocrStrengthMatched ? '✅' : '❌'} ความแรง: <b>${detectedStrength || 'อ่านไม่ติด'}</b></div>` +
+      `<div>${ocrQtyMatched ? '✅' : '❌'} จำนวน: <b style="color:${ocrQtyMatched ? '#15803d' : '#dc2626'};">${qty || 'อ่านไม่ติด'}</b></div>` +
+      `<div>${ocrLocMatched ? '✅' : '❌'} ตำแหน่ง: <b>${detectedLocation || 'อ่านไม่ติด'}</b></div>`;
 
     const verdictBox = document.getElementById('verdictBox');
     const verdictMsg = document.getElementById('verdictMsg');
@@ -720,23 +811,10 @@
     verdictBox.style.display = 'block';
     goBtn.style.display = 'none';
 
-    if (drugFromQR && drugFromOCR && drugFromQR.code === drugFromOCR.code) {
-      activeOrder = { ...drugFromQR, qty: qty, location: shelfLocation };
-      verdictBox.className = 'verdict-box verdict-pass';
-      verdictMsg.innerHTML =
-        `✅ <b>ยืนยัน 2 ชั้นตรงกัน!</b> (รหัส ${drugFromQR.code})<br>` +
-        `จัดยา: <b>${drugFromQR.name}</b> จำนวน <b>${qty}</b>` +
-        (locationBadgeHtml ? `<div style="margin-top:6px; font-size:15px;">ตำแหน่งจัดเก็บยา: ${locationBadgeHtml}</div>` : '');
-      goBtn.style.display = 'block';
-    } else if (drugFromQR && !drugFromOCR) {
-      activeOrder = { ...drugFromQR, qty: qty, location: shelfLocation };
-      verdictBox.className = 'verdict-box verdict-warn';
-      verdictMsg.innerHTML =
-        `⚠️ <b>ล็อก QR สำเร็จ:</b> รหัส <b>${drugFromQR.code}</b> (${drugFromQR.name})` +
-        (locationBadgeHtml ? `<div style="margin-top:4px;">ตำแหน่งจัดเก็บยา: ${locationBadgeHtml}</div>` : '') +
-        `<small style="display:block; margin-top:4px;">หน้าซอง OCR ยังอ่านชื่อยาไม่ชัด สามารถกดปุ่มสีฟ้าถ่ายซ้ำ หรือกดไป Step 2 ได้เลย</small>`;
-      goBtn.style.display = 'block';
-    } else if (drugFromQR && drugFromOCR && drugFromQR.code !== drugFromOCR.code) {
+    const isDifferentDrug = drugFromQR && drugFromOCR && drugFromQR.code !== drugFromOCR.code && !ocrNameMatched;
+    const isAllFourComplete = Boolean(drugFromQR && ocrNameMatched && ocrStrengthMatched && ocrQtyMatched && ocrLocMatched);
+
+    if (isDifferentDrug) {
       playSound('fail');
       const isLogged = logVerificationToSheet(
         'NEAR_MISS',
@@ -750,6 +828,25 @@
       verdictBox.className = 'verdict-box verdict-fail';
       verdictMsg.innerHTML = `🚨 <b>ข้อมูลขัดแย้งกัน!</b><br>QR คือ <b>${drugFromQR.name}</b> แต่หน้าซองคือ <b>${drugFromOCR.name}</b>` +
         (isLogged ? `<br><span class="log-badge">📝 บันทึกสถิติ Near-Miss ลงชีตแล้ว</span>` : '');
+    } else if (isAllFourComplete) {
+      activeOrder = { ...drugFromQR, qty: qty, location: shelfLocation };
+      verdictBox.className = 'verdict-box verdict-pass';
+      verdictMsg.innerHTML =
+        `✅ <b>ยืนยัน OCR ครบทั้ง 4 รายการตรงตาม QR!</b> (รหัส ${drugFromQR.code})<br>` +
+        `จัดยา: <b>${drugFromQR.name}</b> จำนวน <b>${qty}</b>` +
+        `<div style="margin-top:6px; font-size:15px;">ตำแหน่งจัดเก็บยา: ${locationBadgeHtml}</div>`;
+      goBtn.style.display = 'block';
+    } else if (drugFromQR) {
+      const missingItems = [];
+      if (!ocrNameMatched) missingItems.push('ชื่อยา');
+      if (!ocrStrengthMatched) missingItems.push(`ความแรง (${expectedStrengths.join(', ')})`);
+      if (!ocrQtyMatched) missingItems.push('จำนวนยา');
+      if (!ocrLocMatched) missingItems.push(`ตำแหน่ง (${shelfLocation || 'ไม่ระบุในฐานข้อมูล'})`);
+
+      verdictBox.className = 'verdict-box verdict-warn';
+      verdictMsg.innerHTML =
+        `⚠️ <b>ยังอ่านข้อมูลหน้าซองไม่ครบ 4 รายการ</b> (ขาด: <b>${missingItems.join(', ')}</b>)<br>` +
+        `<small style="display:block; margin-top:4px;">กรุณาจัดซองยาให้เห็นข้อความชัดเจน แล้วกดปุ่มสีฟ้า <b>"📸 ถ่ายภาพอ่านชื่อยา (OCR) ซ้ำ"</b> เพื่อยืนยันก่อนไป Step 2</small>`;
     } else if (lockedQrData && !drugFromQR) {
       verdictBox.className = 'verdict-box verdict-fail';
       verdictMsg.innerHTML = `❌ ล็อกรหัสยา <b>${extractedDrugCode}</b> ได้แล้ว แต่ยังไม่พบใน Google Sheets`;
