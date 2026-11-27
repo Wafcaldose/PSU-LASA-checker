@@ -451,7 +451,7 @@
     hn: '',
     qn: '',
     dateKey: '',     // YYYY-MM-DD (ใช้วันที่จาก QR หากมี หรือวันที่ปัจจุบัน)
-    dateDisplay: '', // เช่น 27/11/2569
+    dateDisplay: '', // เช่น 03/11/2569
     dept: '',
     items: []        // [{ code, name, qty, location, time }]
   };
@@ -471,6 +471,7 @@
       locValue: '',
       qnPassed: false,
       qnValue: '',
+      windowNo: '',
       hnPassed: false,
       hnValue: '',
       isComplete: false,
@@ -497,7 +498,7 @@
     };
   }
 
-  // แปลงวันที่ที่อาจพบใน QR (เช่น 27/11/2569, 27/11/2026, 2026-11-27) เป็น dateKey มาตรฐาน
+  // แปลงวันที่ที่อาจพบใน QR (เช่น 03/11/2569, 03-11-2569, 2026-11-03) เป็น dateKey มาตรฐาน
   function normalizeDateFromToken(token) {
     if (!token) return null;
     const clean = token.trim();
@@ -526,11 +527,11 @@
     return null;
   }
 
-  // แยกข้อมูลจาก QR Code: รองรับ HN, QN (Queue Number), วันที่, ช่อง/หอผู้ป่วย และรหัสยา
+  // แยกข้อมูลจาก QR Code: รองรับ HN (เช่น 2133779), QN (เช่น 150), ช่องจ่ายยา (เช่น 37), วันที่, หอผู้ป่วย (เช่น 12Ac) และรหัสยา (เช่น 1564)
   function parseQrDetails(rawQr) {
     const today = getTodayDateInfo();
     if (!rawQr) {
-      return { hn: '', qn: '', dateKey: today.dateKey, dateDisplay: today.dateDisplay, dept: '-', code: '' };
+      return { hn: '', qn: '', windowNo: '', dateKey: today.dateKey, dateDisplay: today.dateDisplay, dept: '-', code: '' };
     }
 
     if (rawQr.includes('|')) {
@@ -541,9 +542,12 @@
 
       let resolvedDate = today;
       let qnCandidate = '';
+      let windowCandidate = '';
+      const textTokens = [];
 
       const middleParts = parts.slice(1, -1);
       for (const part of middleParts) {
+        if (!part || part === '-') continue;
         const parsedDate = normalizeDateFromToken(part);
         if (parsedDate) {
           resolvedDate = parsedDate;
@@ -552,22 +556,32 @@
         const qnPrefix = part.match(/^qn\s*[:=\-]?\s*([a-z0-9\-]+)$/i);
         if (qnPrefix) {
           qnCandidate = qnPrefix[1];
-        } else if (!qnCandidate && /^[a-z]?\d{1,6}$/i.test(part)) {
-          qnCandidate = part;
+          continue;
         }
+        const winPrefix = part.match(/^(?:ช่อง|win|window|ch)\s*[:=\-]?\s*([a-z0-9\-]+)$/i);
+        if (winPrefix) {
+          windowCandidate = winPrefix[1];
+          continue;
+        }
+        // ตัวเลขตัวแรกหลัง HN คือเลขคิว QN (เช่น 150) ส่วนตัวเลขถัดไปหากมีคือช่องจ่ายยา (เช่น 37)
+        if (/^[a-z]?\d{1,6}$/i.test(part)) {
+          if (!qnCandidate) {
+            qnCandidate = part;
+          } else if (!windowCandidate) {
+            windowCandidate = part;
+          }
+          continue;
+        }
+        textTokens.push(part);
       }
 
-      if (!qnCandidate && parts.length >= 3 && parts[1]) {
-        qnCandidate = parts[1].replace(/^qn\s*[:=\-]?\s*/i, '').trim();
-      }
-
-      const dept = parts.length >= 4
-        ? `${parts[parts.length - 2]} (ช่อง ${parts[parts.length - 3] || '-'})`
-        : (parts.length === 3 ? parts[1] : '-');
+      const deptBase = textTokens.length > 0 ? textTokens.join(' ') : '-';
+      const dept = windowCandidate ? `${deptBase} (ช่อง ${windowCandidate})` : deptBase;
 
       return {
         hn,
         qn: qnCandidate,
+        windowNo: windowCandidate,
         dateKey: resolvedDate.dateKey,
         dateDisplay: resolvedDate.dateDisplay,
         dept,
@@ -578,6 +592,7 @@
     return {
       hn: '',
       qn: '',
+      windowNo: '',
       dateKey: today.dateKey,
       dateDisplay: today.dateDisplay,
       dept: '-',
@@ -1087,8 +1102,9 @@
     const hnHtml = qrInfo.hn
       ? `<br>HN: <span class="hn-badge">${qrInfo.hn}</span>`
       : '<br>HN: <span style="color:#64748b;">-</span>';
+    const winText = qrInfo.windowNo ? ` (ช่อง ${qrInfo.windowNo})` : '';
     const qnHtml = qrInfo.qn
-      ? ` • QN: <span class="qn-badge">${qrInfo.qn}</span>`
+      ? ` • QN: <span class="qn-badge">${qrInfo.qn}${winText}</span>`
       : ' • QN: <span style="color:#64748b;">-</span>';
 
     if (ocrProgress.isComplete) {
@@ -1153,40 +1169,56 @@
     }, 350);
   }
 
-  // ตรวจสอบว่า OCR อ่านพบเลข QN ตรงกับ QR Code หรือไม่ (เช่น หลัง [150] 37 หรือ QN 37)
-  function checkQnInOcr(rawOcr, matchedLine, expectedQn) {
-    if (!expectedQn) return true;
+  // ตรวจสอบว่า OCR อ่านพบเลข QN ตรงกับ QR Code หรือไม่ (รูปแบบฉลากจริง: "ช่อง:37[150] 1/1" -> 37 คือช่องจ่ายยา, [150] คือ QN)
+  function checkQnInOcr(rawOcr, matchedLine, expectedQn, expectedWindow = '') {
+    if (!expectedQn) return { matched: true, windowNo: expectedWindow || '' };
     const target = String(expectedQn).trim().toLowerCase();
     const escaped = target.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-    const afterBracketRegex = new RegExp(`[\\]\\)\\}]\\s*${escaped}(?:\\b|\\s|$)`, 'i');
-    if (afterBracketRegex.test(rawOcr)) return true;
+    // 1. รูปแบบฉลากจริง: ช่อง:37[150] หรือ 37[150] (เลขช่องจ่ายยาอยู่หน้าวงเล็บ QN)
+    const windowBeforeBracketRegex = new RegExp(`(?:[:=\\-\\s]|^)(\\d{1,3})\\s*[\\[\\(\\{]\\s*${escaped}\\s*[\\]\\)\\}]`, 'i');
+    const winBeforeMatch = rawOcr.match(windowBeforeBracketRegex);
+    if (winBeforeMatch) {
+      return { matched: true, windowNo: winBeforeMatch[1] || expectedWindow || '' };
+    }
 
+    // 2. กรณีอ่านติดเฉพาะเลข QN ในวงเล็บ [150] (และอาจมีเลขช่องตามหลัง)
+    const bracketOnlyRegex = new RegExp(`[\\[\\(\\{]\\s*${escaped}\\s*[\\]\\)\\}](?:\\s*(\\d{1,3})(?![\\/\\d]))?`, 'i');
+    const bracketMatch = rawOcr.match(bracketOnlyRegex);
+    if (bracketMatch) {
+      return { matched: true, windowNo: bracketMatch[1] || expectedWindow || '' };
+    }
+
+    // 3. รูปแบบมีคำนำหน้า QN เช่น QN 150, QN: 150
     const qnLabelRegex = new RegExp(`(?:qn|คิว)\\s*[:=\\-]?\\s*${escaped}(?:\\b|\\s|$)`, 'i');
-    if (qnLabelRegex.test(rawOcr)) return true;
+    if (qnLabelRegex.test(rawOcr)) {
+      return { matched: true, windowNo: expectedWindow || '' };
+    }
 
+    // 4. รูปแบบตัวเลขเดี่ยวที่ตรงกับ QN ในฉลาก
     const tokenRegex = new RegExp(`(?:^|\\s|[\\[\\(\\{\\/\\-])${escaped}(?:$|\\s|[\\]\\)\\}\\/\\-])`, 'i');
-    if (matchedLine && tokenRegex.test(matchedLine)) return true;
-    if (tokenRegex.test(rawOcr)) return true;
+    if ((matchedLine && tokenRegex.test(matchedLine)) || tokenRegex.test(rawOcr)) {
+      return { matched: true, windowNo: expectedWindow || '' };
+    }
 
-    return false;
+    return { matched: false, windowNo: expectedWindow || '' };
   }
 
-  // ตรวจสอบว่า OCR อ่านพบเลข HN บนหน้าซองตรงกับ QR Code หรือไม่ (รองรับทั้งแบบมีขีด 65-12345 และไม่มีขีด 6512345)
+  // ตรวจสอบว่า OCR อ่านพบเลข HN บนหน้าซองตรงกับ QR Code หรือไม่ (เช่น ": 2133779" หรือแบบมีขีด)
   function checkHnInOcr(rawOcr, expectedHn) {
     if (!expectedHn) return true;
     const cleanExpected = String(expectedHn).trim().replace(/[\s\-]/g, '');
     if (!cleanExpected) return true;
 
-    // 1. เช็กแบบตัวเลขติดกัน (ตัดขีดและช่องว่างออก) เพื่อรองรับ 65-12345 vs 6512345
+    // 1. เช็กแบบตัวเลขติดกัน (ตัดขีดและช่องว่างออก) เพื่อรองรับ 2133779 และ 21-33-779
     const digitsOnlyOcr = rawOcr.replace(/[\s\-]/g, '');
     const escapedClean = cleanExpected.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const boundaryRegex = new RegExp(`(?:^|[^0-9a-zA-Z])${escapedClean}(?:$|[^0-9a-zA-Z])`, 'i');
     if (boundaryRegex.test(digitsOnlyOcr)) return true;
 
-    // 2. เช็กแบบมีคำนำหน้า HN เช่น "HN 6512345", "HN: 65-12345"
+    // 2. เช็กแบบมีคำนำหน้า HN หรือเครื่องหมาย : เช่น ": 2133779", "HN 2133779"
     const rawEscaped = String(expectedHn).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const hnLabelRegex = new RegExp(`(?:hn|h\\.n\\.)\\s*[:=\\-]?\\s*${rawEscaped}`, 'i');
+    const hnLabelRegex = new RegExp(`(?:hn|h\\.n\\.|\\:)\\s*[:=\\-]?\\s*${rawEscaped}`, 'i');
     if (hnLabelRegex.test(rawOcr)) return true;
 
     return false;
@@ -1326,15 +1358,21 @@
       ocrProgress.strengthValue = thisStrengthValue;
     }
 
-    // ค่าที่ 3: จำนวนยา
+    // ค่าที่ 3: จำนวนยา (เช่น "[38]" ในบรรทัดยา และไม่ดึงเลข QN "[150]" มาเป็นจำนวนยา)
     const searchScope = matchedLine || rawOcr;
-    const qtyMatch =
-      searchScope.match(/[\[\(\{]\s*(\d{1,4})\s*[\]\)\}]/) ||
+    const bracketNums = [...searchScope.matchAll(/[\[\(\{]\s*(\d{1,4})\s*[\]\)\}]/g)]
+      .map(m => m[1])
+      .filter(num => !expectedQn || num !== String(expectedQn).trim());
+    const explicitQtyMatch =
       searchScope.match(/(?:จำนวน|qty|x|\*)\s*[:=]?\s*(\d{1,4})/i) ||
       (matchedLine ? matchedLine.match(/\s(\d{1,3})(?:\s*[=\]\)\}])?$/) : null);
-    if (qtyMatch && qtyMatch[1]) {
+
+    if (bracketNums.length > 0) {
       ocrProgress.qtyPassed = true;
-      ocrProgress.qtyValue = qtyMatch[1];
+      ocrProgress.qtyValue = bracketNums[0];
+    } else if (explicitQtyMatch && explicitQtyMatch[1]) {
+      ocrProgress.qtyPassed = true;
+      ocrProgress.qtyValue = explicitQtyMatch[1];
     }
 
     // ค่าที่ 4: ตำแหน่งจัดเก็บยา
@@ -1349,18 +1387,27 @@
       ocrProgress.locValue = shelfLocation;
     }
 
-    // ค่าที่ 5: เลขคิว QN (เทียบกับ QR Code)
+    // ค่าที่ 5: เลขคิว QN (เทียบกับ QR Code เช่น ช่อง:37[150] -> ช่องจ่ายยา = 37, QN = 150)
+    if (qrInfo.windowNo && !ocrProgress.windowNo) {
+      ocrProgress.windowNo = qrInfo.windowNo;
+    }
     if (drugFromQR) {
       if (!expectedQn) {
         ocrProgress.qnPassed = true;
         ocrProgress.qnValue = '-';
-      } else if (checkQnInOcr(rawOcr, matchedLine, expectedQn)) {
-        ocrProgress.qnPassed = true;
-        ocrProgress.qnValue = expectedQn;
+      } else {
+        const qnCheck = checkQnInOcr(rawOcr, matchedLine, expectedQn, qrInfo.windowNo);
+        if (qnCheck.matched) {
+          ocrProgress.qnPassed = true;
+          ocrProgress.qnValue = expectedQn;
+          if (qnCheck.windowNo) {
+            ocrProgress.windowNo = qnCheck.windowNo;
+          }
+        }
       }
     }
 
-    // ค่าที่ 6: เลขประจำตัวผู้ป่วย HN (เทียบกับ QR Code)
+    // ค่าที่ 6: เลขประจำตัวผู้ป่วย HN (เทียบกับ QR Code เช่น 2133779)
     if (drugFromQR) {
       if (!expectedHn) {
         ocrProgress.hnPassed = true;
@@ -1382,7 +1429,8 @@
     const displayStrength = ocrProgress.strengthPassed ? ocrProgress.strengthValue : 'กำลังอ่าน...';
     const displayQty = ocrProgress.qtyPassed ? ocrProgress.qtyValue : 'กำลังอ่าน...';
     const displayLoc = ocrProgress.locPassed ? ocrProgress.locValue : 'กำลังอ่าน...';
-    const displayQn = ocrProgress.qnPassed ? ocrProgress.qnValue : `กำลังหา QN ${expectedQn || ''}...`;
+    const winSuffix = ocrProgress.windowNo ? ` (ช่องจ่ายยา ${ocrProgress.windowNo})` : '';
+    const displayQn = ocrProgress.qnPassed ? `${ocrProgress.qnValue}${winSuffix}` : `กำลังหา QN ${expectedQn || ''}...`;
     const displayHn = ocrProgress.hnPassed ? ocrProgress.hnValue : `กำลังหา HN ${expectedHn || ''}...`;
 
     document.getElementById('ocrResultText').innerHTML =
@@ -1442,11 +1490,12 @@
         location: shelfLocation,
         hn: qrInfo.hn || '-',
         qn: qrInfo.qn || '-',
+        windowNo: ocrProgress.windowNo || qrInfo.windowNo || '',
         dateDisplay: qrInfo.dateDisplay
       };
       verdictBox.className = 'verdict-box verdict-pass';
       verdictMsg.innerHTML =
-        `✅ <b>ยืนยัน OCR ครบทั้ง 6 รายการตรงตาม QR!</b> (HN: ${qrInfo.hn || '-'} | QN: ${qrInfo.qn || '-'})<br>` +
+        `✅ <b>ยืนยัน OCR ครบทั้ง 6 รายการตรงตาม QR!</b> (HN: ${qrInfo.hn || '-'} | QN: ${qrInfo.qn || '-'}${activeOrder.windowNo ? ` | ช่อง: ${activeOrder.windowNo}` : ''})<br>` +
         `จัดยา: <b>${drugFromQR.name}</b> จำนวน <b>${ocrProgress.qtyValue}</b>` +
         (locationBadgeHtml ? `<div style="margin-top:6px; font-size:15px;">ตำแหน่งจัดเก็บยา: ${locationBadgeHtml}</div>` : '') +
         (alreadyInBatch ? `<div style="margin-top:6px; padding:4px 8px; background:#fef3c7; color:#92400e; border-radius:6px; font-size:12px;">⚠️ ยารหัสนี้เคยตรวจผ่านแล้วใน HN ${currentBatch.hn} / QN ${currentBatch.qn} (จำนวน ${alreadyInBatch.qty})</div>` : '');
